@@ -6,8 +6,18 @@
 
 This library allows you to setup and build an APK for your Android devices. This project was mostly based off the work of [ikskuh](https://github.com/ikskuh) and wouldn't exist with their previous work on their [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) project.
 
+
+```sh
+# Target one Android architecture
+zig build -Dtarget=x86_64-linux-android
+
+# Target all Android architectures
+zig build -Dandroid=true
+```
+
 ```zig
-// Look at "examples/minimal/build.zig"
+// This is an overly simplified example to give you the gist
+// of how this library works, see: examples/minimal/build.zig
 
 const android = @import("zig-android-sdk");
 
@@ -17,12 +27,14 @@ pub fn build(b: *std.Build) !void {
     apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
     apk.addResourceDirectory(b.path("android/res"));
     apk.addJavaSourceFile(.{ .file = b.path("android/src/NativeInvocationHandler.java") });
-    apk.addArtifact(b.addSharedLibrary(.{
-        .name = exe_name,
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    }))
+    for (android.standardTargets(b, b.standardTargetOptions(.{}))) |target| {
+        apk.addArtifact(b.addSharedLibrary(.{
+            .name = exe_name,
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }))
+    }
 }
 ```
 

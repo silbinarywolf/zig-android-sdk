@@ -498,7 +498,7 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8
         // NOTE(jae): 2024-09-15
         // Look into auto-discovery of Android SDK for Mac
         // Mac: /Users/<username>/Library/Android/sdk
-        .mac => {},
+        // .macos => {},
         else => {},
     }
     return &[0]u8{};
