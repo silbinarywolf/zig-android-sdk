@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 
 /// Used for reading install locations from the registry
@@ -171,7 +172,7 @@ pub const Tools = struct {
             // Set JDK path here so it will not try searching for jarsigner.exe if searching for Android SDK
             path_search.jdk_path = configured_jdk_path;
         }
-        const configured_android_sdk_path = getAndroidSDKPath(b.allocator, host_os_tag) catch @panic("OOM");
+        const configured_android_sdk_path = getAndroidSDKPath(b.allocator) catch @panic("OOM");
         if (configured_android_sdk_path.len > 0) {
             // Set android SDK path here so it will not try searching for adb.exe if searching for JDK
             path_search.android_sdk_path = configured_android_sdk_path;
@@ -460,7 +461,7 @@ fn getJDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
 }
 
 /// Caller must free returned memory
-fn getAndroidSDKPath(allocator: std.mem.Allocator, host_os_tag: std.Target.Os.Tag) error{OutOfMemory}![]const u8 {
+fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
     const androidHome = std.process.getEnvVarOwned(allocator, "ANDROID_HOME") catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.EnvironmentVariableNotFound => &[0]u8{},
@@ -472,31 +473,34 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator, host_os_tag: std.Target.Os.Ta
     }
 
     // Check for Android Studio
-    if (host_os_tag == .windows) {
-        // First, see if SdkPath in the registry is set
-        // - Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Android Studio - "SdkPath"
-        // - Computer\KHEY_CURRENT_USER\SOFTWARE\Android Studio - "SdkPath"
-        const android_studio_sdk_path: []const u8 = blk: {
-            for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
-                const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
-                    error.KeyNotFound => continue,
-                };
-                const sdk_path = key.getString(allocator, "Android Studio", "SdkPath") catch |err| switch (err) {
-                    error.StringNotFound, error.ValueNameNotFound, error.NotAString => continue,
-                    error.OutOfMemory => return error.OutOfMemory,
-                };
-                break :blk sdk_path;
+    switch (builtin.os.tag) {
+        .windows => {
+            // First, see if SdkPath in the registry is set
+            // - Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Android Studio - "SdkPath"
+            // - Computer\KHEY_CURRENT_USER\SOFTWARE\Android Studio - "SdkPath"
+            const android_studio_sdk_path: []const u8 = blk: {
+                for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
+                    const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
+                        error.KeyNotFound => continue,
+                    };
+                    const sdk_path = key.getString(allocator, "Android Studio", "SdkPath") catch |err| switch (err) {
+                        error.StringNotFound, error.ValueNameNotFound, error.NotAString => continue,
+                        error.OutOfMemory => return error.OutOfMemory,
+                    };
+                    break :blk sdk_path;
+                }
+                break :blk &[0]u8{};
+            };
+            if (android_studio_sdk_path.len > 0) {
+                return android_studio_sdk_path;
             }
-            break :blk &[0]u8{};
-        };
-        if (android_studio_sdk_path.len > 0) {
-            return android_studio_sdk_path;
-        }
+        },
+        // NOTE(jae): 2024-09-15
+        // Look into auto-discovery of Android SDK for Mac
+        // Mac: /Users/<username>/Library/Android/sdk
+        .mac => {},
+        else => {},
     }
-
-    // NOTE(jae): 2024-09-15
-    // Look into auto-discovery of Android SDK for Mac
-    // Mac: /Users/<username>/Library/Android/sdk
     return &[0]u8{};
 }
 

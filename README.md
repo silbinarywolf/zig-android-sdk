@@ -51,7 +51,7 @@ Add the following to your build.zig.zon file, see [examples/minimal/build.zig](e
 
 ## Examples
 
-* [minimal](examples/minimal) This is based off [ZigAndroidTemplate's minimal](https://github.com/ikskuh/ZigAndroidTemplate/tree/master/examples/minimal) example.
+* [minimal](examples/minimal): This is based off [ZigAndroidTemplate's minimal](https://github.com/ikskuh/ZigAndroidTemplate/tree/master/examples/minimal) example.
 
 ## Credits
 
