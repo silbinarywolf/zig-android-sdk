@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  # Cancels pending runs when a PR gets updated.
+  group: ${{ github.head_ref || github.run_id }}-${{ github.actor }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    strategy:
+      matrix:
+        include:
+          - os: "ubuntu-22.04"
+            suffix: "linux"
+
+    runs-on: ${{matrix.os}}
+ 
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Zig
+      # note(jae): 2024-09-15
+      # Uses download mirror first as preferred by Zig Foundation
+      # see: https://ziglang.org/news/migrate-to-self-hosting/
+      uses: mlugg/setup-zig@v1
+      with:
+        version: "0.13.0"
+
+    - name: Build
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/minimal
