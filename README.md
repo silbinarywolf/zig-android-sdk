@@ -4,7 +4,7 @@
 
 ⚠️ **WARNING:** This is a work-in-progress and will be updated as I improve it for my personal SDL2 / OpenXR project.
 
-This library allows you to setup and build an APK for your Android devices. This project was mostly based off the work of [ikskuh](https://github.com/ikskuh) and wouldn't exist with their previous work on their [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) project.
+This library allows you to setup and build an APK for your Android devices. This project was mostly based off the work of [ikskuh](https://github.com/ikskuh) and wouldn't exist without the work they did on the [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) project.
 
 
 ```sh
@@ -18,7 +18,6 @@ zig build -Dandroid=true
 ```zig
 // This is an overly simplified example to give you the gist
 // of how this library works, see: examples/minimal/build.zig
-
 const android = @import("zig-android-sdk");
 
 pub fn build(b: *std.Build) !void {
@@ -44,11 +43,11 @@ pub fn build(b: *std.Build) !void {
 * Android Tools
     * Option A: [Android Studio](https://developer.android.com/studio)
     * Option B: [Android Command Line Tools](https://developer.android.com/studio#command-line-tools-only)
-
+* [Java Development Kit](https://www.oracle.com/au/java/technologies/downloads/)
 
 ## Installation
 
-Add the following to your build.zig.zon file, see [examples/minimal/build.zig](examples/minimal/build.zig) for how to use it.
+Add the following to your build.zig.zon file and run `zig build`.
 
 ```zig
 .{
@@ -68,4 +67,4 @@ Add the following to your build.zig.zon file, see [examples/minimal/build.zig](e
 ## Credits
 
 - [ikskuh](https://github.com/ikskuh) This would not exist without their [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) repository to use as a baseline for figuring this all out and also being able to use their logic for the custom panic / logging functions.
-    - ikskuh gave a huge thanks [https://github.com/cnlohr] for [rawdrawandroid](https://github.com/cnlohr/rawdrawandroid) and so I thank them as well by proxy
+    - ikskuh gave a huge thanks to [@cnlohr](https://github.com/cnlohr) for [rawdrawandroid](https://github.com/cnlohr/rawdrawandroid)
