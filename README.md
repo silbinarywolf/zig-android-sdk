@@ -1,4 +1,4 @@
-# <img src="examples/android/res/mipmap/ic_launcher.png" width="32" height="32"> Zig Android SDK
+# <img src="examples/minimal/android/res/mipmap/ic_launcher.png" width="32" height="32"> Zig Android SDK
 
 ![Continuous integration](https://github.com/silbinarywolf/zig-android-sdk/actions/workflows/ci.yml/badge.svg)
 
@@ -32,8 +32,7 @@ pub fn build(b: *std.Build) !void {
 * Android Tools
     * Option A: [Android Studio](https://developer.android.com/studio)
     * Option B: [Android Command Line Tools](https://developer.android.com/studio#command-line-tools-only)
-            * Place these somewhere and put them in your PATH
-            * Run `sdkmanager` to install tools
+
 
 ## Installation
 
@@ -43,8 +42,8 @@ Add the following to your build.zig.zon file, see [examples/minimal/build.zig](e
 .{
     .dependencies = .{
         .@"zig-android-sdk" = .{
-            .path = "../..",
-            // .hash = replace_with_hash
+            .path = "https://github.com/zigimg/zigimg/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz",
+            // .hash = REPLACE_WITH_HASH_FROM_BUILD_ERROR
         },
     },
 }
@@ -56,5 +55,5 @@ Add the following to your build.zig.zon file, see [examples/minimal/build.zig](e
 
 ## Credits
 
-- [ikskuh](https://github.com/ikskuh) This would not exist without their [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) repository to use as a baseline for figuring this all out.
+- [ikskuh](https://github.com/ikskuh) This would not exist without their [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) repository to use as a baseline for figuring this all out and also being able to use their logic for the custom panic / logging functions.
     - ikskuh gave a huge thanks [https://github.com/cnlohr] for [rawdrawandroid](https://github.com/cnlohr/rawdrawandroid) and so I thank them as well by proxy

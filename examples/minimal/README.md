@@ -1,6 +1,6 @@
 # Minimal Example
 
-A very quick copy and paste of the minimal example from the original ZigAndroidTemplate repository.
+As of 2024-09-19, this is a thrown together, very quick copy-paste of the minimal example from the original [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate/blob/master/examples/minimal/main.zig) repository.
 
 ### Build and install to test one target against a local emulator
 

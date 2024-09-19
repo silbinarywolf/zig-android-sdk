@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const android = @import("zig-android-sdk");
 
-pub fn build(b: *std.Build) !void {
+pub fn build(b: *std.Build) void {
     const exe_name: []const u8 = "minimal";
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
