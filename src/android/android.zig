@@ -127,11 +127,6 @@ pub const Panic = struct {
     }
 
     fn panicImpl(trace: ?*const std.builtin.StackTrace, first_trace_addr: ?usize, msg: []const u8) noreturn {
-        if (comptime std.mem.eql(u8, builtin.zig_version_string, "0.13.0"))
-            @setCold(true)
-        else
-            @cold(true);
-
         // NOTE(jae): 2024-09-15
         // resetSegfaultHandler is not a public function
         // if (comptime std.options.enable_segfault_handler) {
