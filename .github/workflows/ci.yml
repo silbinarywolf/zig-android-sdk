@@ -18,7 +18,10 @@ jobs:
       matrix:
         include:
           - os: "ubuntu-22.04"
-            suffix: "linux"
+            zig: "0.13.0"
+
+          - os: "ubuntu-22.04"
+            zig: "0.14.0"
 
     runs-on: ${{matrix.os}}
  
@@ -31,7 +34,7 @@ jobs:
       # see: https://ziglang.org/news/migrate-to-self-hosting/
       uses: mlugg/setup-zig@v1
       with:
-        version: "0.13.0"
+        version: ${{matrix.zig}}
 
     - name: Set up JDK 17
       uses: actions/setup-java@v3
