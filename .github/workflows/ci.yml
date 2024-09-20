@@ -18,10 +18,11 @@ jobs:
       matrix:
         include:
           - os: "ubuntu-22.04"
-            zig: "0.13.0"
-
+            zig: "0.13.0" # aka "latest" at time of writing (2024-09-20)
+          
+          # Use the nightly build
           - os: "ubuntu-22.04"
-            zig: "latest"
+            zig: "master"
 
     runs-on: ${{matrix.os}}
  
