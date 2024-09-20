@@ -21,7 +21,7 @@ jobs:
             zig: "0.13.0"
 
           - os: "ubuntu-22.04"
-            zig: "0.14.0"
+            zig: "latest"
 
     runs-on: ${{matrix.os}}
  
