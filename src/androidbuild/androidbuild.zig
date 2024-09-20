@@ -100,7 +100,6 @@ pub fn runNameContext(comptime name: []const u8) []const u8 {
 const log = std.log.scoped(.@"zig-android-sdk");
 
 pub fn printErrorsAndExit(message: []const u8, errors: []const []const u8) noreturn {
-    @setCold(true);
     nosuspend {
         log.err("{s}", .{message});
         const stderr = std.io.getStdErr().writer();
