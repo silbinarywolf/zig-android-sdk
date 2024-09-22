@@ -61,9 +61,11 @@ jobs:
       working-directory: examples/minimal
 
     - name: Build SDL2 Example (Zig Nightly)
-      # "zig build -Dandroid=true" fails for x86 on Linux but not locally on my copy Windows
-      # android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42: error: expression is not an integral constant expression
-      # See: https://github.com/silbinarywolf/zig-android-sdk/actions/runs/10979334884/job/30483574893?pr=5
-      run: zig build -Dandroid=true --verbose
-      #run: zig build -Dtarget=x86_64-linux-android --verbose
+      # "zig build -Dandroid=true" fails for 0.14.0-dev.1632
+      #
+      # android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42:
+      # error: expression is not an integral constant expression
+      #
+      # See: https://github.com/silbinarywolf/zig-android-sdk/actions/runs/10979711793/job/30484520174?pr=5#step:10:30
+      run: zig build -Dtarget=x86_64-linux-android --verbose
       working-directory: examples/sdl2
