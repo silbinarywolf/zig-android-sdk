@@ -19,6 +19,8 @@ jobs:
         include:
           - os: "ubuntu-22.04"
           - os: "windows-latest"
+          - os: "macos-12" # x86_64
+          - os: "macos-14" # ARM
 
     runs-on: ${{matrix.os}}
  
