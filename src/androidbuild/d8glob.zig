@@ -69,9 +69,24 @@ pub const D8Glob = struct {
 
         const search_dir = glob.dir.getPath2(b, step);
 
+        // NOTE(jae): 2024-09-22
+        // Not sure this is necessary if we add each file
+        //
         // Add --classpath
-        d8.addArg("--classpath");
-        d8.addDirectoryArg(glob.dir);
+        // d8.addArg("--classpath");
+        // d8.addDirectoryArg(glob.dir);
+
+        // NOTE(jae): 2024-09-22
+        // Change current working directory to where the Java classes are
+        // This is to avoid the Java error "command line too long" that can occur with d8
+        //
+        // I was hitting this due to a path this long on Windows
+        // J:\ZigProjects\openxr-game\third-party\zig-android-sdk\examples\sdl2\.zig-cache\o\9012552ac182acf9dfb49627cf81376e\android_dex
+        //
+        // A deeper fix to this problem could be:
+        // - Zip up all the *.class files and just provide that as ONE argument or alternatively
+        // - If "d8" has the ability to pass a file of command line parameters, that would work too but I haven't seen any in the docs
+        d8.setCwd(glob.dir);
 
         var dir = try fs.openDirAbsolute(search_dir, .{ .iterate = true });
         defer dir.close();
@@ -85,9 +100,17 @@ pub const D8Glob = struct {
             // - !std.mem.containsAtLeast(u8, entry.basename, 1, "$") and
             // - !std.mem.containsAtLeast(u8, entry.basename, 1, "_API")
             if (std.mem.endsWith(u8, entry.path, file_ext)) {
-                d8.addFileArg(LazyPath{
-                    .cwd_relative = try fs.path.resolve(arena, &.{ search_dir, entry.path }),
-                });
+                // NOTE(jae): 2024-09-22
+                // We set the current working directory to "glob.Dir" and then make arguments be
+                // relative to that directory.
+                //
+                // This is to avoid the Java error "command line too long" that can occur with d8
+                d8.addArg(try std.fs.path.join(arena, &.{
+                    entry.path,
+                }));
+                // d8.addFileArg(LazyPath{
+                //     .cwd_relative = try fs.path.resolve(arena, &.{ search_dir, entry.path }),
+                // });
             }
         }
     }

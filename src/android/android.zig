@@ -3,6 +3,18 @@ const builtin = @import("builtin");
 
 extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
+/// Update the tag used by the Android logger, this will default to your package name unless logging occurs in a seperate
+/// thread.
+///
+/// ie. If using via SDL2, you'll likely want the tag set.
+///
+/// NOTE(jae): 2024-09-22
+/// We should look at moving to making the "tag" default your Android package name by parsing that out of your AndroidManifest.xml
+/// or perhaps even just make it use the "name" of your app
+pub fn set_default_tag(tag: [:0]const u8) void {
+    LogWriter.tag = tag;
+}
+
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = Panic.panic;
 
@@ -72,7 +84,7 @@ pub fn logFn(
 const LogWriter = struct {
     /// name of the application / log scope
     /// if not set, it'll default to the "package" attribute defined in AndroidManifest.xml
-    const tag: [*c]const u8 = null;
+    var tag: [:0]const u8 = &[0:0]u8{};
 
     level: Level,
 
@@ -104,11 +116,19 @@ const LogWriter = struct {
         if (self.line_len > 0) {
             std.debug.assert(self.line_len < self.line_buffer.len - 1);
             self.line_buffer[self.line_len] = 0;
-            _ = __android_log_write(
-                @intFromEnum(self.level),
-                null, // tag.ptr,
-                &self.line_buffer,
-            );
+            if (tag.len == 0) {
+                _ = __android_log_write(
+                    @intFromEnum(self.level),
+                    null,
+                    &self.line_buffer,
+                );
+            } else {
+                _ = __android_log_write(
+                    @intFromEnum(self.level),
+                    tag.ptr,
+                    &self.line_buffer,
+                );
+            }
         }
         self.line_len = 0;
     }
