@@ -16,6 +16,17 @@ zig build -Dandroid=true
 adb install ./zig-out/bin/minimal.apk
 ```
 
+### Uninstall your application
+
+If installing your application fails with something like:
+```
+adb: failed to install ./zig-out/bin/minimal.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.zig.minimal signatures do not match newer version; ignoring!]
+```
+
+```sh
+adb uninstall "com.zig.minimal"
+```
+
 ### View logs of application
 
 Powershell
