@@ -43,19 +43,19 @@ jobs:
       with:
         version: "0.13.0"
 
-    - name: Build Minimal Example (0.13.0)
+    - name: Build Minimal Example (Zig 0.13.0)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (0.13.0)
+    - name: Build SDL2 Example (Zig 0.13.0)
       # "zig build -Dandroid=true" fails for x86 on Linux but not locally on my copy Windows
       # android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42: error: expression is not an integral constant expression
       # See: https://github.com/silbinarywolf/zig-android-sdk/actions/runs/10979334884/job/30483574893?pr=5
       run: |
-        zig build -Dtarget=x86_64-linux-android --verbose
+        zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
-    - name: Setup Zig Latest Nightly
+    - name: Setup Zig Nightly
       uses: mlugg/setup-zig@v1
       with:
         version: "master"
