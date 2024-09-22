@@ -321,6 +321,12 @@ pub const APK = struct {
             d8.addArg("--output");
             const dex_output_dir = d8.addOutputDirectoryArg("android_dex");
 
+            // NOTE(jae): 2024-09-22
+            // As per documentation for d8, we may want to specific the minimum API level we want
+            // to support. Not sure how to test or expose this yet. See: https://developer.android.com/tools/d8
+            // d8.addArg("--min-api");
+            // d8.addArg(number_as_string);
+
             // add each output *.class file
             D8Glob.addClassFilesRecursively(b, d8, java_classes_output_dir);
             const dex_file = dex_output_dir.path(b, "classes.dex");
@@ -425,14 +431,39 @@ pub const APK = struct {
 };
 
 fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
+    if (artifact.linkage) |linkage| {
+        if (linkage != .dynamic) {
+            @panic("can only call updateSharedLibraryOptions if linkage is dynamic");
+        }
+    } else {
+        @panic("can only call updateSharedLibraryOptions if linkage is dynamic");
+    }
+
+    // Detect if just compiling C files, if that's the case, avoid bundling the Zig compiler runtime
+    var is_compiling_c = false;
+    for (artifact.root_module.link_objects.items) |link_object| {
+        switch (link_object) {
+            .c_source_file => {
+                is_compiling_c = true;
+            },
+            .c_source_files => {
+                is_compiling_c = true;
+            },
+            else => {},
+        }
+    }
+
     // NOTE(jae): 2024-09-01
     // Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
     // Do we need all these?
-    // artifact.link_emit_relocs = true;
+    artifact.link_emit_relocs = true;
     artifact.link_eh_frame_hdr = true;
     artifact.root_module.pic = true;
     artifact.link_function_sections = true;
-    artifact.bundle_compiler_rt = true;
+    // NOTE(jae): 2024-09-22
+    // Only bundle the Zig compiler RT for libraries that use a *.zig file
+    // The point of this logic is to avoid this being true for C code
+    artifact.bundle_compiler_rt = !is_compiling_c;
     if (artifact.root_module.optimize) |optimize| {
         // NOTE(jae): ZigAndroidTemplate used: (optimize == .ReleaseSmall);
         artifact.root_module.strip = optimize == .ReleaseSmall;
@@ -443,7 +474,16 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
     // Remove when https://github.com/ziglang/zig/issues/7935 is resolved.
     if (artifact.root_module.resolved_target) |target| {
         if (target.result.cpu.arch == .x86) {
-            artifact.link_z_notext = true;
+            const use_link_z_notext_workaround: bool = if (artifact.bundle_compiler_rt) |bcr| bcr else false;
+            if (use_link_z_notext_workaround) {
+                // NOTE(jae): 2024-09-22
+                // This workaround can prevent your libmain.so from loading. At least in my testing with running Android 10 (Q, API Level 29)
+                //
+                // This is due to:
+                // "Text Relocations Enforced for API Level 23"
+                // See: https://android.googlesource.com/platform/bionic/+/refs/tags/ndk-r14/android-changes-for-ndk-developers.md
+                artifact.link_z_notext = true;
+            }
         }
     }
 }
