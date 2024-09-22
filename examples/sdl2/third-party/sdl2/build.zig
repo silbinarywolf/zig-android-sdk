@@ -141,7 +141,7 @@ pub fn build(b: *std.Build) !void {
                         });
                         hidapi_lib.linkSystemLibrary("log");
                         hidapi_lib.linkLibCpp();
-                        lib.linkLibrary(hidapi_lib);
+                        hidapi_lib.linkLibrary(lib);
                         b.installArtifact(hidapi_lib);
                     }
                 },

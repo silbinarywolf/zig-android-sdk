@@ -17,10 +17,10 @@ jobs:
     strategy:
       matrix:
         include:
-          # - os: "ubuntu-22.04"
-          # - os: "windows-latest"
+          - os: "ubuntu-22.04"
+          - os: "windows-latest"
           - os: "macos-12" # x86_64
-          - os: "macos-14" # ARM
+          - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
 
     runs-on: ${{matrix.os}}
  
