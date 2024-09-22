@@ -158,7 +158,7 @@ pub const Tools = struct {
         const host_os_and_arch: [:0]const u8 = switch (host_os_tag) {
             .windows => "windows-x86_64",
             .linux => "linux-x86_64",
-            // TODO(jae): 2024-09-15: Add MacOS support
+            .macos => "darwin-x86_64",
             else => @panic(b.fmt("unhandled operating system: {}", .{host_os_tag})),
         };
 
