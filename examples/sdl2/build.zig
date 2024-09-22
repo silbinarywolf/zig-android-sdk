@@ -108,7 +108,7 @@ pub fn build(b: *std.Build) void {
             }
         }
     }
-    if (android_apk) |ab| {
-        ab.installApk();
+    if (android_apk) |apk| {
+        apk.installApk();
     }
 }
