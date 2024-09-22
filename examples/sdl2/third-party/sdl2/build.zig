@@ -5,9 +5,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const sdl_dep = b.lazyDependency("sdl2", .{}) orelse {
-        return;
-    };
+    const sdl_dep = b.dependency("sdl2", .{});
     const sdl_path = sdl_dep.path("");
     const sdl_include_path = sdl_path.path(b, "include");
 

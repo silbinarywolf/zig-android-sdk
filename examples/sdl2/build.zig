@@ -17,34 +17,32 @@ pub fn build(b: *std.Build) void {
     const android_apk: ?*android.APK = blk: {
         if (android_targets.len == 0) {
             break :blk null;
-        } else {
-            const android_tools = android.Tools.create(b, .{
-                .api_level = .android15,
-                .build_tools_version = "35.0.0",
-                .ndk_version = "27.0.12077973",
-            });
-            const apk = android.APK.create(b, android_tools);
-
-            const key_store_file = android_tools.createKeyStore(android.CreateKey.example());
-            apk.setKeyStore(key_store_file);
-            apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
-            apk.addResourceDirectory(b.path("android/res"));
-
-            // Add Java files
-            apk.addJavaSourceFile(.{ .file = b.path("android/src/ZigSDLActivity.java") });
-
-            // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
-            const sdl_dep = b.dependency("sdl2", .{
-                .optimize = .ReleaseFast,
-                .target = android_targets[0],
-            });
-            const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
-            for (sdl_java_files.files.items) |file| {
-                apk.addJavaSourceFile(.{ .file = file.contents.copy });
-            }
-
-            break :blk apk;
         }
+        const android_tools = android.Tools.create(b, .{
+            .api_level = .android15,
+            .build_tools_version = "35.0.0",
+            .ndk_version = "27.0.12077973",
+        });
+        const apk = android.APK.create(b, android_tools);
+
+        const key_store_file = android_tools.createKeyStore(android.CreateKey.example());
+        apk.setKeyStore(key_store_file);
+        apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
+        apk.addResourceDirectory(b.path("android/res"));
+
+        // Add Java files
+        apk.addJavaSourceFile(.{ .file = b.path("android/src/ZigSDLActivity.java") });
+
+        // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
+        const sdl_dep = b.dependency("sdl2", .{
+            .optimize = .ReleaseFast,
+            .target = android_targets[0],
+        });
+        const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
+        for (sdl_java_files.files.items) |file| {
+            apk.addJavaSourceFile(.{ .file = file.contents.copy });
+        }
+        break :blk apk;
     };
 
     for (targets) |target| {
