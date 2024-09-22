@@ -33,14 +33,14 @@ pub fn build(b: *std.Build) void {
             // Add Java files
             apk.addJavaSourceFile(.{ .file = b.path("android/src/ZigSDLActivity.java") });
 
-            // Add SDL2's Java files like SDLActivity.java, etc
+            // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
             const sdl_dep = b.dependency("sdl2", .{
                 .optimize = .ReleaseFast,
                 .target = android_targets[0],
             });
             const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
             for (sdl_java_files.files.items) |file| {
-                apk.addJavaSourceFile(.{ .file = file.getPath() });
+                apk.addJavaSourceFile(.{ .file = file.contents.copy });
             }
 
             break :blk apk;

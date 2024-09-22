@@ -26,7 +26,7 @@ zig build run
 
 If installing your application fails with something like:
 ```
-adb: failed to install ./zig-out/bin/minimal.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.zig.sdl2 signatures do not match newer version; ignoring!]
+adb: failed to install ./zig-out/bin/sdl2.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.zig.sdl2 signatures do not match newer version; ignoring!]
 ```
 
 ```sh
