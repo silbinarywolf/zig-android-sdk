@@ -291,8 +291,8 @@ pub const APK = struct {
             const javac_cmd = b.addSystemCommand(&[_][]const u8{
                 apk.tools.java_tools.javac,
                 // NOTE(jae): 2024-09-22
-                // Force encoding to be utf8 for Windows, this fixes the following comment
-                // causing SDL2to not compile under Windows:
+                // Force encoding to be "utf8", this fixes the following error occuring in Windows:
+                // error: unmappable character (0x8F) for encoding windows-1252
                 // Source: https://github.com/libsdl-org/SDL/blob/release-2.30.7/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java#L2045
                 "-encoding",
                 "utf8",
