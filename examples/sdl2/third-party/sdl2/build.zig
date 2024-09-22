@@ -122,12 +122,27 @@ pub fn build(b: *std.Build) !void {
                     if (!use_hidapi) {
                         lib.root_module.addCMacro("SDL_HIDAPI_DISABLED", "");
                     } else {
-                        lib.root_module.addCSourceFiles(.{
+                        // NOTE(jae): 2024-09-22
+                        // Build settings taken from: src/hidapi/android/jni/Android.mk
+                        // SDLActivity.java by default expects to be able to load this library.
+                        const hidapi_lib = b.addSharedLibrary(.{
+                            .name = "hidapi",
+                            .target = target,
+                            .optimize = optimize,
+                            .link_libc = true,
+                        });
+                        hidapi_lib.addIncludePath(sdl_include_path);
+                        hidapi_lib.root_module.addCSourceFiles(.{
                             .root = sdl_path,
-                            .files = &android_cpp_src_files,
+                            .files = &[_][]const u8{
+                                "src/hidapi/android/hid.cpp",
+                            },
                             .flags = &.{"-std=c++11"},
                         });
-                        lib.linkLibCpp();
+                        hidapi_lib.linkSystemLibrary("log");
+                        hidapi_lib.linkLibCpp();
+                        lib.linkLibrary(hidapi_lib);
+                        b.installArtifact(hidapi_lib);
                     }
                 },
                 else => {
@@ -339,10 +354,6 @@ const android_src_files = [_][]const u8{
     "src/video/android/SDL_androidvideo.c",
     "src/video/android/SDL_androidvulkan.c",
     "src/video/android/SDL_androidwindow.c",
-};
-
-const android_cpp_src_files = [_][]const u8{
-    "src/hidapi/android/hid.cpp",
 };
 
 const windows_src_files = [_][]const u8{

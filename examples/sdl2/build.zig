@@ -75,6 +75,12 @@ pub fn build(b: *std.Build) void {
                 exe.linkLibrary(sdl_lib);
             }
 
+            // NOTE(jae): 2024-09-22
+            // Load additional dynamic libraries that SDLActivity.java loads such as hidapi
+            if (target.result.isAndroid()) {
+                exe.linkLibrary(sdl_dep.artifact("hidapi"));
+            }
+
             const sdl_module = sdl_dep.module("sdl");
             exe.root_module.addImport("sdl", sdl_module);
         }
