@@ -62,7 +62,8 @@ Add the following to your build.zig.zon file and run `zig build`.
 
 ## Examples
 
-* [minimal](examples/minimal): This is based off [ZigAndroidTemplate's minimal](https://github.com/ikskuh/ZigAndroidTemplate/tree/master/examples/minimal) example.
+* [minimal](examples/minimal): This is based off ZigAndroidTemplate's minimal example.
+* [SDL2](examples/sdl2): This is based off Andrew Kelly's SDL Zig Demo but modified to run on Android, Windows, Mac and Linux.
 
 ## Credits
 
