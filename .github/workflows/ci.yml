@@ -56,5 +56,5 @@ jobs:
       # -Dandroid=true fails for x86 on Linux but not locally on my copy of Windows
       # android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42: error: expression is not an integral constant expression
       # See: https://github.com/silbinarywolf/zig-android-sdk/actions/runs/10979334884/job/30483574893?pr=5
-      run: zig build -Dtarget=x86_64-linux-android --verbose
+      run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
