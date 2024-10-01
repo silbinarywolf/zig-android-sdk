@@ -1,4 +1,5 @@
 const std = @import("std");
+const androidbuild = @import("androidbuild.zig");
 const builtin = @import("builtin");
 const Build = std.Build;
 const Step = Build.Step;
@@ -27,7 +28,7 @@ pub const D8Glob = struct {
         glob.* = .{
             .step = Step.init(.{
                 .id = base_id,
-                .name = "zig-android-sdk d8glob",
+                .name = androidbuild.runNameContext("d8glob"),
                 .owner = owner,
                 .makeFn = comptime if (std.mem.eql(u8, builtin.zig_version_string, "0.13.0"))
                     make013
@@ -55,12 +56,6 @@ pub const D8Glob = struct {
         try make(step);
     }
 
-    // TODO(jae): 2024-09-03
-    // Look into seeing if we can cache this to avoid directory walking after first time.
-    //
-    // This step does not cache very well and requires recursively walking the directory each time
-    // I could probably use the hash of given generated dir and read an existing file that lists
-    // each file for quick lookup? Dunno.
     fn make(step: *Step) !void {
         const b = step.owner;
         const arena = b.allocator;
@@ -68,13 +63,6 @@ pub const D8Glob = struct {
         const d8 = glob.run;
 
         const search_dir = glob.dir.getPath2(b, step);
-
-        // NOTE(jae): 2024-09-22
-        // Not sure this is necessary if we add each file
-        //
-        // Add --classpath
-        // d8.addArg("--classpath");
-        // d8.addDirectoryArg(glob.dir);
 
         // NOTE(jae): 2024-09-22
         // Change current working directory to where the Java classes are
@@ -96,7 +84,9 @@ pub const D8Glob = struct {
             if (entry.kind != .file) {
                 continue;
             }
-            // Exclude special classes?
+            // NOTE(jae): 2024-10-01
+            // Initially ignored classes with alternate API postfixes / etc but
+            // that did not work with SDL2 so no longer do that.
             // - !std.mem.containsAtLeast(u8, entry.basename, 1, "$") and
             // - !std.mem.containsAtLeast(u8, entry.basename, 1, "_API")
             if (std.mem.endsWith(u8, entry.path, file_ext)) {
@@ -105,12 +95,10 @@ pub const D8Glob = struct {
                 // relative to that directory.
                 //
                 // This is to avoid the Java error "command line too long" that can occur with d8
-                d8.addArg(try std.fs.path.join(arena, &.{
-                    entry.path,
-                }));
-                // d8.addFileArg(LazyPath{
-                //     .cwd_relative = try fs.path.resolve(arena, &.{ search_dir, entry.path }),
-                // });
+                d8.addArg(entry.path);
+                d8.addFileInput(LazyPath{
+                    .cwd_relative = try fs.path.resolve(arena, &.{ search_dir, entry.path }),
+                });
             }
         }
     }

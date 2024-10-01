@@ -74,12 +74,23 @@ pub const Tools = struct {
     ndk_sysroot_path: []const u8,
     /// ie. "$ANDROID_HOME/Sdk/platforms/android-{api_level}/android.jar"
     root_jar: []const u8,
+    // $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
+    jdk_path: []const u8,
     /// ie. $ANDROID_HOME/build-tools/35.0.0
     build_tools: struct {
-        aapt: []const u8,
+        aapt2: []const u8,
         zipalign: []const u8,
         d8: []const u8,
         apksigner: []const u8,
+    },
+    /// ie. $ANDROID_HOME/cmdline_tools/bin or $ANDROID_HOME/tools/bin
+    ///
+    /// Available to download at: https://developer.android.com/studio#command-line-tools-only
+    /// The commandline tools ZIP expected looks like: commandlinetools-{OS}-11076708_latest.zip
+    cmdline_tools: struct {
+        /// lint [flags] <project directory>
+        /// See documentation: https://developer.android.com/studio/write/lint#commandline
+        lint: []const u8,
     },
     /// Binaries provided by the JDK that usually exist in:
     /// - Non-Windows: $JAVA_HOME/bin
@@ -88,6 +99,11 @@ pub const Tools = struct {
     /// - C:\Program Files\Eclipse Adoptium\jdk-11.0.17.8-hotspot\
     /// - C:\Program Files\Java\jdk-17.0.4.1\
     java_tools: struct {
+        /// jar is used to zip up files in a cross-platform way that does not rely on
+        /// having "zip" in your command-line (Windows does not have this)
+        ///
+        /// ie. https://stackoverflow.com/a/18180154/5013410
+        jar: []const u8,
         javac: []const u8,
         keytool: []const u8,
     },
@@ -207,6 +223,44 @@ pub const Tools = struct {
         // Validate
         var errors = std.ArrayList([]const u8).init(b.allocator);
         defer errors.deinit();
+
+        // Get commandline tools path
+        // - 1st: $ANDROID_HOME/cmdline-tools/bin
+        // - 2nd: $ANDROID_HOME/tools/bin
+        const cmdline_tools_path = cmdlineblk: {
+            const cmdline_tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "bin" });
+            std.fs.accessAbsolute(cmdline_tools, .{}) catch |cmderr| switch (cmderr) {
+                error.FileNotFound => {
+                    const tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "tools", "bin" });
+                    // Check if Commandline tools path is accessible
+                    std.fs.accessAbsolute(tools, .{}) catch |toolerr| switch (toolerr) {
+                        error.FileNotFound => {
+                            const message = b.fmt("Android Command Line Tools not found. Expected at: {s} or {s}", .{
+                                cmdline_tools,
+                                tools,
+                            });
+                            errors.append(message) catch @panic("OOM");
+                        },
+                        else => {
+                            const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
+                                @errorName(toolerr),
+                                tools,
+                            });
+                            errors.append(message) catch @panic("OOM");
+                        },
+                    };
+                },
+                else => {
+                    const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
+                        @errorName(cmderr),
+                        cmdline_tools,
+                    });
+                    errors.append(message) catch @panic("OOM");
+                },
+            };
+            break :cmdlineblk cmdline_tools;
+        };
+
         if (jdk_path.len == 0) {
             errors.append(
                 \\JDK not found.
@@ -360,9 +414,10 @@ pub const Tools = struct {
             .ndk_version = options.ndk_version,
             .ndk_sysroot_path = android_ndk_sysroot,
             .root_jar = root_jar,
+            .jdk_path = jdk_path,
             .build_tools = .{
-                .aapt = b.pathResolve(&[_][]const u8{
-                    build_tools_path, b.fmt("aapt{s}", .{exe_suffix}),
+                .aapt2 = b.pathResolve(&[_][]const u8{
+                    build_tools_path, b.fmt("aapt2{s}", .{exe_suffix}),
                 }),
                 .zipalign = b.pathResolve(&[_][]const u8{
                     build_tools_path, b.fmt("zipalign{s}", .{exe_suffix}),
@@ -376,7 +431,17 @@ pub const Tools = struct {
                     build_tools_path, b.fmt("apksigner{s}", .{bat_suffix}),
                 }),
             },
+            .cmdline_tools = .{
+                .lint = b.pathResolve(&[_][]const u8{
+                    cmdline_tools_path, b.fmt("lint{s}", .{bat_suffix}),
+                }),
+                // NOTE(jae): 2024-09-28
+                // Consider adding sdkmanager.bat so you can do something like "zig build sdkmanager -- {args}"
+            },
             .java_tools = .{
+                .jar = b.pathResolve(&[_][]const u8{
+                    jdk_path, "bin", b.fmt("jar{s}", .{exe_suffix}),
+                }),
                 .javac = b.pathResolve(&[_][]const u8{
                     jdk_path, "bin", b.fmt("javac{s}", .{exe_suffix}),
                 }),
@@ -435,7 +500,7 @@ fn createLibC(b: *std.Build, system_target: []const u8, android_version: APILeve
     return android_libc_path;
 }
 
-/// Search JDK_HOME, and JAVA_HOME
+/// Search JDK_HOME, and then JAVA_HOME
 fn getJDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
     const jdkHome = std.process.getEnvVarOwned(allocator, "JDK_HOME") catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
@@ -567,7 +632,7 @@ const PathSearch = struct {
             // Iterate over PATH environment folders until we either hit the end or the Android SDK folder
             try self.getNext(.jdk);
         }
-        // Get the Android SDK path
+        // Get the Java Home path
         const jdk_path = self.jdk_path orelse unreachable;
         if (jdk_path.len == 0) return &[0]u8{};
         return allocator.dupe(u8, jdk_path);
