@@ -114,8 +114,6 @@ pub const APK = struct {
         module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}/{d}", .{ android_ndk_sysroot, system_target, android_api_version }) });
         // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ /usr/lib/aarch64-linux-android
         module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}", .{ android_ndk_sysroot, system_target }) });
-        // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ /usr/lib
-        module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib", .{android_ndk_sysroot}) });
     }
 
     pub fn installApk(apk: *@This()) void {
@@ -185,15 +183,125 @@ pub const APK = struct {
         }
 
         // Setup AndroidManifest.xml
-        const android_manifest_file = apk.android_manifest orelse {
+        const android_manifest_file: LazyPath = apk.android_manifest orelse {
             @panic("call setAndroidManifestFile and point to your AndroidManifest.xml file");
         };
 
+        // TODO(jae): 2024-10-01
+        // Add option where you can explicitly set an optional release mode with like:
+        // - setMode(.debug)
+        //
+        // If that value ISN'T set then we can just infer based on optimization level.
+        const debug_apk: bool = blk: {
+            for (apk.artifacts.items) |root_artifact| {
+                if (root_artifact.root_module.optimize) |optimize| {
+                    if (optimize == .Debug) {
+                        break :blk true;
+                    }
+                }
+            }
+            break :blk false;
+        };
+
+        // Make zip of compiled resource files, ie.
+        // - res/values/strings.xml -> values_strings.arsc.flat
+        // - mipmap/ic_launcher.png -> mipmap-ic_launcher.png.flat
+        const resources_flat_zip: LazyPath = blk: {
+            const aapt2compile = b.addSystemCommand(&[_][]const u8{
+                apk.tools.build_tools.aapt2,
+                "compile",
+            });
+
+            // add directory
+            aapt2compile.addArg("--dir");
+            aapt2compile.addDirectoryArg(apk.resource_files.getDirectory());
+
+            aapt2compile.addArg("-o");
+            const resources_flat_zip_file = aapt2compile.addOutputFileArg("resources.flat.zip");
+            aapt2compile.setName(runNameContext("aapt2 compile"));
+            break :blk resources_flat_zip_file;
+        };
+
+        // Make resources.apk from:
+        // - resources.flat.zip (created from "aapt2 compile")
+        //    - res/values/strings.xml -> values_strings.arsc.flat
+        // - AndroidManifest.xml
+        //
+        // This also validates your AndroidManifest.xml and can catch configuration errors
+        // which "aapt" was not capable of.
+        // See: https://developer.android.com/tools/aapt2#aapt2_element_hierarchy
+        // Snapshot: http://web.archive.org/web/20241001070128/https://developer.android.com/tools/aapt2#aapt2_element_hierarchy
+        const resources_apk: LazyPath = blk: {
+            const aapt2link = b.addSystemCommand(&[_][]const u8{
+                apk.tools.build_tools.aapt2,
+                "link",
+                "-I", // add an existing package to base include set
+                apk.tools.root_jar,
+            });
+            aapt2link.setName(runNameContext("aapt2 link"));
+
+            if (b.verbose) {
+                aapt2link.addArg("-v");
+            }
+
+            // Inserts android:debuggable="true" in to the application node of the manifest,
+            // making the application debuggable even on production devices.
+            if (debug_apk) {
+                aapt2link.addArg("--debug-mode");
+            }
+
+            // full path to AndroidManifest.xml to include in APK
+            // ie. --manifest AndroidManifest.xml
+            aapt2link.addArg("--manifest");
+            aapt2link.addFileArg(android_manifest_file);
+
+            // TODO(jae): 2024-10-01
+            // We can skip outputting to zip and extracting and just output to dir
+            // aapt2link.addArg("--output-to-dir"); // Requires: Android SDK Build Tools 28.0.0 or higher
+            // Specify output file
+            aapt2link.addArg("-o");
+            const resources_apk_file = aapt2link.addOutputFileArg("resources.apk");
+
+            aapt2link.addArgs(&[_][]const u8{
+                "--target-sdk-version",
+                b.fmt("{d}", .{@intFromEnum(apk.tools.api_level)}),
+            });
+
+            // TODO(jae): 2024-09-17
+            // Add support for asset directories
+            // Additional directory
+            // aapt.step.dependOn(&resource_write_files.step);
+            // for (app_config.asset_directories) |dir| {
+            //     make_unsigned_apk.addArg("-A"); // additional directory in which to find raw asset files
+            //     make_unsigned_apk.addArg(sdk.b.pathFromRoot(dir));
+            // }
+
+            // Add resource files
+            aapt2link.addFileArg(resources_flat_zip);
+
+            break :blk resources_apk_file;
+        };
+
+        // TODO(jae): 2024-10-01
+        // Extract the package name from the APK and build that information
+        // into the Zig code
+        // - aapt2 dump packagename output.apk
+        //
+        // We could also use that information to create easy to use Zig step like
+        // - zig build adb-uninstall (adb uninstall "com.zig.sdl2")
+        // - zig build adb-logcat
+        //    - Works if process isn't running anymore/crashed: Powershell: adb logcat | Select-String com.zig.sdl2:
+        //    - Only works if process is running: adb logcat --pid=`adb shell pidof -s com.zig.sdl2`
+        //
+        // ADB install doesn't require the package name however.
+        // - zig build adb-install (adb install ./zig-out/bin/minimal.apk)
+
         // These are files that belong in root like:
         // - lib/x86_64/libmain.so
+        // - lib/x86_64/libSDL2.so
         // - lib/x86/libmain.so
         // - classes.dex
-        const raw_top_level_apk_files = b.addWriteFiles();
+        const apk_files = b.addWriteFiles();
 
         // Add build artifacts, usually a shared library targetting:
         // - aarch64-linux-android
@@ -213,7 +321,7 @@ pub const APK = struct {
                 .x86 => "x86",
                 else => @panic(b.fmt("unsupported or unhandled arch: {s}", .{@tagName(target.result.cpu.arch)})),
             };
-            _ = raw_top_level_apk_files.addCopyFile(root_artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
+            _ = apk_files.addCopyFile(root_artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
 
             // update artifact to:
             // - Be configured to work correctly on Android
@@ -231,7 +339,7 @@ pub const APK = struct {
                 artifact.linkLibC();
             }
             // NOTE(jae): 2024-08-09
-            // Try to fix compilation issues for arm-linux-androideabi
+            // Try to fix compilation issues for ARM 32-bit (ie. arm-linux-androideabi)
             // if (target.result.cpu.arch == .arm) {
             //     // artifact.root_module.addCMacro("__ARM_ARCH_7A__", "");
             //     // artifact.root_module.addCMacro("_ARM_ARCH_7", "");
@@ -242,46 +350,7 @@ pub const APK = struct {
             // update linked libraries that use C or C++ to:
             // - use Android LibC file
             // - add Android NDK library paths. (libandroid, liblog, etc)
-            for (root_artifact.root_module.link_objects.items) |link_object| {
-                switch (link_object) {
-                    .other_step => |artifact| {
-                        switch (artifact.kind) {
-                            .lib => {
-                                // If you have a library that is being built as an *.so then install it
-                                // alongside your library.
-                                //
-                                // This was initially added to support building SDL2 with Zig.
-                                if (artifact.linkage) |linkage| {
-                                    if (linkage == .dynamic) {
-                                        updateSharedLibraryOptions(artifact);
-
-                                        _ = raw_top_level_apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
-                                    }
-                                }
-
-                                // If library is built using C or C++, add Android C File and Library Paths
-                                const link_libc = artifact.root_module.link_libc orelse false;
-                                const link_libcpp = artifact.root_module.link_libcpp orelse false;
-                                if (link_libc or link_libcpp) {
-                                    // NOTE(jae): 2024-08-09
-                                    // Try to fix compilation issues for arm-linux-androideabi
-                                    // if (target.result.cpu.arch == .arm) {
-                                    // other_step.root_module.addCMacro("_ARM_ARCH_7", "");
-                                    // other_step.root_module.addCMacro("__ARM_ARCH_7A__", ""); // Fixes nothing
-                                    // other_step.root_module.addCMacro("__ARM_ARCH", "7"); // '__ARM_ARCH' macro redefined
-                                    // other_step.root_module.addCMacro("_M_ARM", "");
-                                    // }
-                                    // other_step.root_module.addCMacro("__ANDROID__", "");
-                                    apk.tools.setLibCFile(artifact);
-                                    apk.addLibraryPaths(&artifact.root_module);
-                                }
-                            },
-                            else => continue,
-                        }
-                    },
-                    else => {},
-                }
-            }
+            apk.updateLinkObjects(root_artifact, so_dir, apk_files);
         }
 
         // Add *.jar files
@@ -309,8 +378,6 @@ pub const APK = struct {
             // Add Java files
             for (apk.java_files.items) |java_file| {
                 javac_cmd.addFileArg(java_file);
-                // If *.java file is in dependency/generated
-                //java_file.addStepDependencies(&javac_cmd.step);
             }
 
             // From d8.bat
@@ -338,78 +405,100 @@ pub const APK = struct {
             const dex_file = dex_output_dir.path(b, "classes.dex");
 
             // Append classes.dex to apk
-            _ = raw_top_level_apk_files.addCopyFile(dex_file, "classes.dex");
+            _ = apk_files.addCopyFile(dex_file, "classes.dex");
         }
 
-        // Make unsigned apk
-        const unaligned_apk_file: LazyPath = blk: {
-            const aapt = b.addSystemCommand(&[_][]const u8{
-                apk.tools.build_tools.aapt,
-                "package",
-                "-f", // force overwrite of existing output .apk file, otherwise build errors can occur on subsequent runs (Zig 0.13.0)
-                "-I", // add an existing package to base include set
-                apk.tools.root_jar,
+        // Extract compiled resources.apk and add contents to the folder we'll zip with "jar" below
+        // See: https://musteresel.github.io/posts/2019/07/build-android-app-bundle-on-command-line.html
+        {
+            const jar = b.addSystemCommand(&[_][]const u8{
+                apk.tools.java_tools.jar,
             });
-            aapt.setName(runNameContext("aapt"));
+            jar.setName(runNameContext("jar (unzip resources.apk)"));
+            if (b.verbose) {
+                jar.addArg("--verbose");
+            }
 
-            // Specify output file
-            aapt.addArg("-F");
-            const unaligned_output_apk_file = aapt.addOutputFileArg("unaligned-apk.apk");
+            // Extract *.apk file created with "aapt2 link"
+            jar.addArg("--extract");
+            jar.addPrefixedFileArg("--file=", resources_apk);
 
-            // full path to AndroidManifest.xml to include in zip
-            // ie. -M AndroidManifest.xml
-            aapt.addArg("-M");
-            aapt.addFileArg(android_manifest_file);
-            // aapt.step.dependOn(&android_manifest_write_files.step);
-
-            // Directory in which to find resources. Multiple directories will be scanned and the first match found (left to right) will take precedence
-            // ie. "-S RESOURCES_DIR"
-            aapt.addArg("-S");
-            aapt.addDirectoryArg(apk.resource_files.getDirectory());
-
-            aapt.addArgs(&[_][]const u8{
-                "-v",
-                "--target-sdk-version",
-                b.fmt("{d}", .{@intFromEnum(apk.tools.api_level)}),
+            // NOTE(jae): 2024-09-30
+            // Extract to directory of resources_apk and force add that to the overall apk files
+            const extracted_apk_dir = resources_apk.dirname();
+            jar.setCwd(extracted_apk_dir);
+            _ = apk_files.addCopyDirectory(extracted_apk_dir, "", .{
+                // Ignore the *.apk that exists in this directory
+                .exclude_extensions = &.{".apk"},
             });
+            apk_files.step.dependOn(&jar.step);
+        }
 
-            // TODO(jae): 2024-09-17
-            // Add support for asset directories
+        // Create zip via "jar" as it's cross-platform and aapt2 can't zip *.so or *.dex files.
+        // - lib/**/*.so
+        // - classes.dex
+        // - {directory with all resource files like: AndroidManifest.xml, res/values/strings.xml}
+        const zip_file: LazyPath = blk: {
+            const jar = b.addSystemCommand(&[_][]const u8{
+                apk.tools.java_tools.jar,
+            });
+            jar.setName(runNameContext("jar (zip compress apk)"));
 
-            // Additional directory
-            // aapt.step.dependOn(&resource_write_files.step);
-            // for (app_config.asset_directories) |dir| {
-            //     make_unsigned_apk.addArg("-A"); // additional directory in which to find raw asset files
-            //     make_unsigned_apk.addArg(sdk.b.pathFromRoot(dir));
-            // }
+            const directory_to_zip = apk_files.getDirectory();
+            jar.setCwd(directory_to_zip);
+            // NOTE(jae): 2024-09-30
+            // Hack to ensure this side-effect re-triggers zipping this up
+            jar.addFileInput(directory_to_zip.path(b, "AndroidManifest.xml"));
 
-            // Raw files directory (As per docs here: https://manpages.org/aapt)
-            aapt.addDirectoryArg(raw_top_level_apk_files.getDirectory());
-            break :blk unaligned_output_apk_file;
+            // -c = compress
+            // -f specify filename
+            // -M do not include a MANIFEST file
+            const compress_zip_arg = "-cfM";
+            if (b.verbose) jar.addArg(compress_zip_arg ++ "v") else jar.addArg(compress_zip_arg);
+            const output_zip_file = jar.addOutputFileArg("compiled_code.zip");
+            jar.addArg(".");
+
+            break :blk output_zip_file;
         };
 
-        var zipalign = b.addSystemCommand(&[_][]const u8{
-            apk.tools.build_tools.zipalign,
-        });
-        const apk_unaligned_zip_file = unaligned_apk_file;
+        // NOTE(jae): 2024-09-28 - https://github.com/silbinarywolf/zig-android-sdk/issues/8
+        // Experimented with using "lint" but it didn't actually catch the issue described
+        // in the above Github, ie. having "<category android:name="org.khronos.openxr.intent.category.IMMERSIVE_HMD" />"
+        // outside of an <intent-filter>
+        //
+        // const lint = b.addSystemCommand(&[_][]const u8{
+        //     apk.tools.commandline_tools.lint,
+        // });
+        // lint.setEnvironmentVariable("PATH", b.pathJoin(&.{ apk.tools.jdk_path, "bin" }));
+        // lint.setEnvironmentVariable("JAVA_HOME", apk.tools.jdk_path);
+        // lint.addFileArg(android_manifest_file);
+
+        const apk_name = apk.artifacts.items[0].name;
 
         // Align contents of .apk (zip)
         const aligned_apk_file: LazyPath = blk: {
+            var zipalign = b.addSystemCommand(&[_][]const u8{
+                apk.tools.build_tools.zipalign,
+            });
+
             // If you use apksigner, zipalign must be used before the APK file has been signed.
             // If you sign your APK using apksigner and make further changes to the APK, its signature is invalidated.
             // Source: https://developer.android.com/tools/zipalign (10th Sept, 2024)
             //
             // Example: "zipalign -P 16 -f -v 4 infile.apk outfile.apk"
+            if (b.verbose) {
+                zipalign.addArg("-v");
+            }
             zipalign.addArgs(&.{
                 "-P", // aligns uncompressed .so files to the specified page size in KiB...
                 "16", // ... align to 16kb
                 "-f", // overwrite existing files
-                "-v", // verbose
                 // "-z", // recompresses using Zopfli. (very very slow)
                 "4",
             });
-            zipalign.addFileArg(apk_unaligned_zip_file);
-            const apk_file = zipalign.addOutputFileArg("aligned-apk.apk");
+
+            zipalign.addFileArg(zip_file);
+            const apk_file = zipalign.addOutputFileArg(b.fmt("aligned-{s}.apk", .{apk_name}));
             break :blk apk_file;
         };
 
@@ -429,10 +518,56 @@ pub const APK = struct {
             break :blk signed_output_apk_file;
         };
 
-        const apk_name = apk.artifacts.items[0].name;
-        const apk_filename = b.fmt("{s}.apk", .{apk_name});
-        const install_apk = b.addInstallBinFile(signed_apk_file, apk_filename);
+        const install_apk = b.addInstallBinFile(signed_apk_file, b.fmt("{s}.apk", .{apk_name}));
         return install_apk;
+    }
+
+    fn updateLinkObjects(apk: *@This(), root_artifact: *Step.Compile, so_dir: []const u8, raw_top_level_apk_files: *Step.WriteFile) void {
+        const b = apk.b;
+        for (root_artifact.root_module.link_objects.items) |link_object| {
+            switch (link_object) {
+                .other_step => |artifact| {
+                    switch (artifact.kind) {
+                        .lib => {
+                            // If you have a library that is being built as an *.so then install it
+                            // alongside your library.
+                            //
+                            // This was initially added to support building SDL2 with Zig.
+                            if (artifact.linkage) |linkage| {
+                                if (linkage == .dynamic) {
+                                    updateSharedLibraryOptions(artifact);
+                                    _ = raw_top_level_apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
+                                }
+                            }
+
+                            // If library is built using C or C++ then setLibCFile
+                            const link_libc = artifact.root_module.link_libc orelse false;
+                            const link_libcpp = artifact.root_module.link_libcpp orelse false;
+                            if (link_libc or link_libcpp) {
+                                // NOTE(jae): 2024-08-09
+                                // Try to fix compilation issues for arm-linux-androideabi
+                                // if (target.result.cpu.arch == .arm) {
+                                // other_step.root_module.addCMacro("_ARM_ARCH_7", "");
+                                // other_step.root_module.addCMacro("__ARM_ARCH_7A__", ""); // Fixes nothing
+                                // other_step.root_module.addCMacro("__ARM_ARCH", "7"); // '__ARM_ARCH' macro redefined
+                                // other_step.root_module.addCMacro("_M_ARM", "");
+                                // }
+                                // other_step.root_module.addCMacro("__ANDROID__", "");
+                                apk.tools.setLibCFile(artifact);
+                            }
+
+                            // Add library paths to find "android", "log", etc
+                            apk.addLibraryPaths(&artifact.root_module);
+
+                            // Update libraries linked to this library
+                            apk.updateLinkObjects(artifact, so_dir, raw_top_level_apk_files);
+                        },
+                        else => continue,
+                    }
+                },
+                else => {},
+            }
+        }
     }
 };
 
@@ -445,31 +580,17 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
         @panic("can only call updateSharedLibraryOptions if linkage is dynamic");
     }
 
-    // Detect if just compiling C files, if that's the case, avoid bundling the Zig compiler runtime
-    var is_compiling_c = false;
-    for (artifact.root_module.link_objects.items) |link_object| {
-        switch (link_object) {
-            .c_source_file => {
-                is_compiling_c = true;
-            },
-            .c_source_files => {
-                is_compiling_c = true;
-            },
-            else => {},
-        }
-    }
-
     // NOTE(jae): 2024-09-01
     // Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
     // Do we need all these?
-    artifact.link_emit_relocs = true;
+    // artifact.link_emit_relocs = true; // Retains all relocations in the executable file. This results in larger executable files
     artifact.link_eh_frame_hdr = true;
     artifact.root_module.pic = true;
     artifact.link_function_sections = true;
     // NOTE(jae): 2024-09-22
-    // Only bundle the Zig compiler RT for libraries that use a *.zig file
-    // The point of this logic is to avoid this being true for C code
-    artifact.bundle_compiler_rt = !is_compiling_c;
+    // Need compiler_rt even for C code, for example aarch64 can fail to load on Android when compiling SDL2
+    // because it's missing "__aarch64_cas8_acq_rel"
+    artifact.bundle_compiler_rt = true;
     if (artifact.root_module.optimize) |optimize| {
         // NOTE(jae): ZigAndroidTemplate used: (optimize == .ReleaseSmall);
         artifact.root_module.strip = optimize == .ReleaseSmall;
