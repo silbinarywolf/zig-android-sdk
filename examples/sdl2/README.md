@@ -35,12 +35,17 @@ adb uninstall "com.zig.sdl2"
 
 ### View logs of application
 
-Powershell
+Powershell (app doesn't need to be running)
 ```sh
 adb logcat | Select-String com.zig.sdl2:
 ```
 
-Bash
+Bash (app doesn't need running to be running)
+```sh
+adb logcat com.zig.sdl2:D *:S
+```
+
+Bash (app must be running, logs everything by the process including modules)
 ```sh
 adb logcat --pid=`adb shell pidof -s com.zig.sdl2`
 ```

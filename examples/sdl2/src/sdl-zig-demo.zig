@@ -23,7 +23,6 @@ else
 /// This needs to be exported for Android builds
 export fn SDL_main() callconv(.C) void {
     if (builtin.abi == .android) {
-        android.set_default_tag("com.zig.sdl2");
         _ = std.start.callMain();
     } else {
         @panic("SDL_main should not be called outside of Android builds");
@@ -31,6 +30,8 @@ export fn SDL_main() callconv(.C) void {
 }
 
 pub fn main() !void {
+    log.debug("started sdl-zig-demo", .{});
+
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) < 0) {
         log.info("Unable to initialize SDL: {s}", .{sdl.SDL_GetError()});
         return error.SDLInitializationFailed;
@@ -69,7 +70,14 @@ pub fn main() !void {
     defer sdl.SDL_DestroyTexture(zig_texture);
 
     var quit = false;
+    var has_run_frame: FrameLog = .none;
     while (!quit) {
+        if (has_run_frame == .one_frame_passed) {
+            // NOTE(jae): 2024-10-03
+            // Allow inspection of logs to see if a frame executed at least once
+            log.debug("has executed one frame", .{});
+            has_run_frame = .logged_one_frame;
+        }
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
             switch (event.type) {
@@ -83,7 +91,15 @@ pub fn main() !void {
         _ = sdl.SDL_RenderClear(renderer);
         _ = sdl.SDL_RenderCopy(renderer, zig_texture, null, null);
         sdl.SDL_RenderPresent(renderer);
-
         sdl.SDL_Delay(17);
+        if (has_run_frame == .none) {
+            has_run_frame = .one_frame_passed;
+        }
     }
 }
+
+const FrameLog = enum {
+    none,
+    one_frame_passed,
+    logged_one_frame,
+};
