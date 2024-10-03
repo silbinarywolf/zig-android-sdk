@@ -2,6 +2,7 @@ const std = @import("std");
 const androidbuild = @import("androidbuild.zig");
 const D8Glob = @import("d8glob.zig").D8Glob;
 const Tools = @import("tools.zig").Tools;
+const BuiltinOptionsUpdate = @import("builtin_options_update.zig").BuiltinOptionsUpdate;
 
 const KeyStore = androidbuild.KeyStore;
 const getAndroidTriple = androidbuild.getAndroidTriple;
@@ -14,39 +15,52 @@ const ResolvedTarget = std.Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
 
 pub const APK = struct {
-    const AddJavaSourceFileOption = struct {
+    pub const AddJavaSourceFileOption = struct {
         file: LazyPath,
         // NOTE(jae): 2024-09-17
         // Consider adding flags to define/declare the target Java version for this file.
         // Not sure what we'll need in the future.
         // flags: []const []const u8 = &.{},
     };
-    const AddJavaSourceFilesOptions = struct {
+    pub const AddJavaSourceFilesOptions = struct {
         root: LazyPath,
         files: []const []const u8,
+    };
+    pub const Resource = union(enum) {
+        // file: File,
+        directory: Directory,
+
+        // pub const File = struct {
+        //     source: LazyPath,
+        // };
+
+        pub const Directory = struct {
+            source: LazyPath,
+        };
     };
 
     b: *std.Build,
     tools: *const Tools,
 
+    key_store: ?KeyStore,
+
     android_manifest: ?LazyPath,
     artifacts: std.ArrayListUnmanaged(*Step.Compile),
     java_files: std.ArrayListUnmanaged(LazyPath),
-    key_store: ?KeyStore,
-    resource_files: *Step.WriteFile,
+    resources: std.ArrayListUnmanaged(Resource),
 
     pub fn create(b: *std.Build, tools: *const Tools) *@This() {
-        const ab: *@This() = b.allocator.create(@This()) catch @panic("OOM");
-        ab.* = .{
+        const apk: *@This() = b.allocator.create(@This()) catch @panic("OOM");
+        apk.* = .{
             .b = b,
             .tools = tools,
+            .key_store = null,
             .android_manifest = null,
             .artifacts = .{},
             .java_files = .{},
-            .resource_files = b.addWriteFiles(),
-            .key_store = null,
+            .resources = .{},
         };
-        return ab;
+        return apk;
     }
 
     /// Set the AndroidManifest.xml file to use
@@ -61,7 +75,12 @@ pub const APK = struct {
     /// - mipmap-mdpi/ic_launcher.png
     /// - etc
     pub fn addResourceDirectory(apk: *@This(), dir: LazyPath) void {
-        _ = apk.resource_files.addCopyDirectory(dir, "", .{});
+        const b = apk.b;
+        apk.resources.append(b.allocator, Resource{
+            .directory = .{
+                .source = dir,
+            },
+        }) catch @panic("OOM");
     }
 
     /// Add artifact to the Android build, this should be a shared library (*.so)
@@ -89,7 +108,7 @@ pub const APK = struct {
     /// This is required run on an Android device.
     ///
     /// If you want to just use a temporary key for local development, do something like this:
-    /// - ab.setKeyStore(android_tools.createKeyStore(android.CreateKey.example()));
+    /// - apk.setKeyStore(android_tools.createKeyStore(android.CreateKey.example()));
     pub fn setKeyStore(apk: *@This(), key_store: KeyStore) void {
         apk.key_store = key_store;
     }
@@ -203,25 +222,6 @@ pub const APK = struct {
             break :blk false;
         };
 
-        // Make zip of compiled resource files, ie.
-        // - res/values/strings.xml -> values_strings.arsc.flat
-        // - mipmap/ic_launcher.png -> mipmap-ic_launcher.png.flat
-        const resources_flat_zip: LazyPath = blk: {
-            const aapt2compile = b.addSystemCommand(&[_][]const u8{
-                apk.tools.build_tools.aapt2,
-                "compile",
-            });
-
-            // add directory
-            aapt2compile.addArg("--dir");
-            aapt2compile.addDirectoryArg(apk.resource_files.getDirectory());
-
-            aapt2compile.addArg("-o");
-            const resources_flat_zip_file = aapt2compile.addOutputFileArg("resources.flat.zip");
-            aapt2compile.setName(runNameContext("aapt2 compile"));
-            break :blk resources_flat_zip_file;
-        };
-
         // Make resources.apk from:
         // - resources.flat.zip (created from "aapt2 compile")
         //    - res/values/strings.xml -> values_strings.arsc.flat
@@ -255,17 +255,23 @@ pub const APK = struct {
             aapt2link.addArg("--manifest");
             aapt2link.addFileArg(android_manifest_file);
 
-            // TODO(jae): 2024-10-01
-            // We can skip outputting to zip and extracting and just output to dir
-            // aapt2link.addArg("--output-to-dir"); // Requires: Android SDK Build Tools 28.0.0 or higher
-            // Specify output file
-            aapt2link.addArg("-o");
-            const resources_apk_file = aapt2link.addOutputFileArg("resources.apk");
-
             aapt2link.addArgs(&[_][]const u8{
                 "--target-sdk-version",
                 b.fmt("{d}", .{@intFromEnum(apk.tools.api_level)}),
             });
+
+            // NOTE(jae): 2024-10-02
+            // Explored just outputting to dir but it gets errors like:
+            //  - error: failed to write res/mipmap-mdpi-v4/ic_launcher.png to archive:
+            //      The system cannot find the file specified. (2).
+            //
+            // So... I'll stick with the creating an APK and extracting it approach.
+            // aapt2link.addArg("--output-to-dir"); // Requires: Android SDK Build Tools 28.0.0 or higher
+            // aapt2link.addArg("-o");
+            // const resources_apk_dir = aapt2link.addOutputDirectoryArg("resources");
+
+            aapt2link.addArg("-o");
+            const resources_apk_file = aapt2link.addOutputFileArg("resources.apk");
 
             // TODO(jae): 2024-09-17
             // Add support for asset directories
@@ -277,16 +283,55 @@ pub const APK = struct {
             // }
 
             // Add resource files
-            aapt2link.addFileArg(resources_flat_zip);
+            for (apk.resources.items) |resource| {
+                const resources_flat_zip = resblk: {
+                    // Make zip of compiled resource files, ie.
+                    // - res/values/strings.xml -> values_strings.arsc.flat
+                    // - mipmap/ic_launcher.png -> mipmap-ic_launcher.png.flat
+                    switch (resource) {
+                        .directory => |resource_directory| {
+                            const aapt2compile = b.addSystemCommand(&[_][]const u8{
+                                apk.tools.build_tools.aapt2,
+                                "compile",
+                            });
+                            aapt2compile.setName(runNameContext("aapt2 compile [dir]"));
+
+                            // add directory
+                            aapt2compile.addArg("--dir");
+                            aapt2compile.addDirectoryArg(resource_directory.source);
+
+                            aapt2compile.addArg("-o");
+                            const resources_flat_zip_file = aapt2compile.addOutputFileArg("resource_dir.flat.zip");
+
+                            break :resblk resources_flat_zip_file;
+                        },
+                    }
+                };
+
+                // Add resources.flat.zip
+                aapt2link.addFileArg(resources_flat_zip);
+            }
 
             break :blk resources_apk_file;
         };
 
-        // TODO(jae): 2024-10-01
-        // Extract the package name from the APK and build that information
-        // into the Zig code
-        // - aapt2 dump packagename output.apk
-        //
+        const package_name_file = blk: {
+            const aapt2packagename = b.addSystemCommand(&[_][]const u8{
+                apk.tools.build_tools.aapt2,
+                "dump",
+                "packagename",
+            });
+            aapt2packagename.setName(runNameContext("aapt2 dump packagename"));
+            aapt2packagename.addFileArg(resources_apk);
+            break :blk aapt2packagename.captureStdOut();
+        };
+
+        const android_builtin = blk: {
+            const android_builtin_options = std.Build.addOptions(b);
+            BuiltinOptionsUpdate.create(b, android_builtin_options, package_name_file);
+            break :blk android_builtin_options.createModule();
+        };
+
         // We could also use that information to create easy to use Zig step like
         // - zig build adb-uninstall (adb uninstall "com.zig.sdl2")
         // - zig build adb-logcat
@@ -308,8 +353,8 @@ pub const APK = struct {
         // - arm-linux-androideabi
         // - i686-linux-android
         // - x86_64-linux-android
-        for (apk.artifacts.items, 0..) |root_artifact, artifact_index| {
-            const target: ResolvedTarget = root_artifact.root_module.resolved_target orelse {
+        for (apk.artifacts.items, 0..) |artifact, artifact_index| {
+            const target: ResolvedTarget = artifact.root_module.resolved_target orelse {
                 @panic(b.fmt("artifact[{d}] has no 'target' set", .{artifact_index}));
             };
 
@@ -321,14 +366,13 @@ pub const APK = struct {
                 .x86 => "x86",
                 else => @panic(b.fmt("unsupported or unhandled arch: {s}", .{@tagName(target.result.cpu.arch)})),
             };
-            _ = apk_files.addCopyFile(root_artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
+            _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
 
             // update artifact to:
             // - Be configured to work correctly on Android
             // - To know where C header /lib files are via setLibCFile and linkLibC
             // - Provide path to additional libraries to link to
             {
-                const artifact = root_artifact;
                 if (artifact.linkage) |linkage| {
                     if (linkage == .dynamic) {
                         updateSharedLibraryOptions(artifact);
@@ -338,6 +382,18 @@ pub const APK = struct {
                 apk.addLibraryPaths(&artifact.root_module);
                 artifact.linkLibC();
             }
+
+            // Add module
+            artifact.root_module.addImport("android_builtin", android_builtin);
+
+            var modules_it = artifact.root_module.import_table.iterator();
+            while (modules_it.next()) |entry| {
+                const module = entry.value_ptr.*;
+                if (module.import_table.get("android_builtin")) |_| {
+                    module.addImport("android_builtin", android_builtin);
+                }
+            }
+
             // NOTE(jae): 2024-08-09
             // Try to fix compilation issues for ARM 32-bit (ie. arm-linux-androideabi)
             // if (target.result.cpu.arch == .arm) {
@@ -350,7 +406,7 @@ pub const APK = struct {
             // update linked libraries that use C or C++ to:
             // - use Android LibC file
             // - add Android NDK library paths. (libandroid, liblog, etc)
-            apk.updateLinkObjects(root_artifact, so_dir, apk_files);
+            apk.updateLinkObjects(artifact, so_dir, apk_files);
         }
 
         // Add *.jar files
@@ -424,7 +480,9 @@ pub const APK = struct {
             jar.addPrefixedFileArg("--file=", resources_apk);
 
             // NOTE(jae): 2024-09-30
-            // Extract to directory of resources_apk and force add that to the overall apk files
+            // Extract to directory of resources_apk and force add that to the overall apk files.
+            // This currently has an issue where because we can't use "addOutputDirectoryArg" this
+            // step will always be executed.
             const extracted_apk_dir = resources_apk.dirname();
             jar.setCwd(extracted_apk_dir);
             _ = apk_files.addCopyDirectory(extracted_apk_dir, "", .{
@@ -480,6 +538,7 @@ pub const APK = struct {
             var zipalign = b.addSystemCommand(&[_][]const u8{
                 apk.tools.build_tools.zipalign,
             });
+            zipalign.setName(runNameContext("zipalign"));
 
             // If you use apksigner, zipalign must be used before the APK file has been signed.
             // If you sign your APK using apksigner and make further changes to the APK, its signature is invalidated.

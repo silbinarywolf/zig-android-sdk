@@ -22,5 +22,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    // Create stub of builtin options.
+    // This is discovered and then replace in src/androidbuild/apk.zig
+    const android_builtin_options = std.Build.addOptions(b);
+    android_builtin_options.addOption([:0]const u8, "package_name", "");
+    module.addImport("android_builtin", android_builtin_options.createModule());
+
     module.linkSystemLibrary("log", .{});
 }

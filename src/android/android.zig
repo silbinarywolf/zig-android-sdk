@@ -1,19 +1,19 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
+// TODO(jae): 2024-10-03
+// Consider exposing this in the future
+// pub const builtin = android_builtin;
 
-/// Update the tag used by the Android logger, this will default to your package name unless logging occurs in a seperate
-/// thread.
-///
-/// ie. If using via SDL2, you'll likely want the tag set.
-///
-/// NOTE(jae): 2024-09-22
-/// We should look at moving to making the "tag" default your Android package name by parsing that out of your AndroidManifest.xml
-/// or perhaps even just make it use the "name" of your app
-pub fn set_default_tag(tag: [:0]const u8) void {
-    LogWriter.tag = tag;
-}
+const android_builtin = struct {
+    const ab = @import("android_builtin");
+
+    /// package name extracted from your AndroidManifest.xml file
+    /// ie. "com.zig.sdl2"
+    pub const package_name: [:0]const u8 = ab.package_name;
+};
+
+extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = Panic.panic;
@@ -50,12 +50,12 @@ pub const Level = enum(u8) {
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub fn logFn(
     comptime message_level: std.log.Level,
-    comptime scope: if (builtin.zig_version.minor != 13)
-        // Support Zig 0.14.0-dev
-        @Type(.enum_literal)
-    else
+    comptime scope: if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)
         // Support Zig 0.13.0
-        @Type(.EnumLiteral),
+        @Type(.EnumLiteral)
+    else
+        // Support Zig 0.14.0-dev
+        @Type(.enum_literal),
     comptime format: []const u8,
     args: anytype,
 ) void {
@@ -82,9 +82,17 @@ pub fn logFn(
 
 /// LogWriter was was taken basically as is from: https://github.com/ikskuh/ZigAndroidTemplate
 const LogWriter = struct {
-    /// name of the application / log scope
-    /// if not set, it'll default to the "package" attribute defined in AndroidManifest.xml
-    var tag: [:0]const u8 = &[0:0]u8{};
+    /// Default to the "package" attribute defined in AndroidManifest.xml
+    ///
+    /// If tag isn't set when calling "__android_log_write" then it *usually* defaults to the current
+    /// package name, ie. "com.zig.minimal"
+    ///
+    /// However if running via a seperate thread, then it seems to use that threads
+    /// tag, which means if you log after running code through sdl_main, it won't print
+    /// logs with the package name.
+    ///
+    /// To workaround this, we bake the package name into the Zig binaries.
+    var tag: [:0]const u8 = android_builtin.package_name;
 
     level: Level,
 
