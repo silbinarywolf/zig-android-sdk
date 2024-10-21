@@ -228,7 +228,7 @@ pub const Tools = struct {
         // - 1st: $ANDROID_HOME/cmdline-tools/bin
         // - 2nd: $ANDROID_HOME/tools/bin
         const cmdline_tools_path = cmdlineblk: {
-            const cmdline_tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "bin" });
+            const cmdline_tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "latest", "bin" });
             std.fs.accessAbsolute(cmdline_tools, .{}) catch |cmderr| switch (cmderr) {
                 error.FileNotFound => {
                     const tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "tools", "bin" });
@@ -563,7 +563,15 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8
         // NOTE(jae): 2024-09-15
         // Look into auto-discovery of Android SDK for Mac
         // Mac: /Users/<username>/Library/Android/sdk
-        // .macos => {},
+        .macos => {
+            const user = std.process.getEnvVarOwned(allocator, "USER") catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.EnvironmentVariableNotFound => &[0]u8{},
+                error.InvalidWtf8 => @panic("USER environment variable is invalid UTF-8"),
+            };
+            defer allocator.free(user);
+            return try std.fmt.allocPrint(allocator, "/Users/{s}/Library/Android/sdk", .{user});
+        },
         else => {},
     }
     return &[0]u8{};
