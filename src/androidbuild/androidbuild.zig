@@ -45,7 +45,7 @@ pub const KeyStore = struct {
 };
 
 pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]const u8 {
-    if (target.result.abi != .android) return error.InvalidAndroidTarget;
+    if (!target.result.abi.isAndroid()) return error.InvalidAndroidTarget;
     return switch (target.result.cpu.arch) {
         .x86 => "i686-linux-android",
         .x86_64 => "x86_64-linux-android",
@@ -66,7 +66,7 @@ pub fn standardTargets(b: *std.Build, target: ResolvedTarget) []ResolvedTarget {
     if (all_targets) {
         return getAllAndroidTargets(b);
     }
-    if (target.result.abi != .android) {
+    if (!target.result.abi.isAndroid()) {
         return &[0]ResolvedTarget{};
     }
     if (target.result.os.tag != .linux) {
@@ -130,7 +130,7 @@ const AndroidTargetQuery = struct {
         return .{
             .os_tag = .linux,
             .cpu_model = .baseline,
-            .abi = .android,
+            .abi = if (android_target.cpu_arch != .arm) .android else .androideabi,
             .cpu_arch = android_target.cpu_arch,
             .cpu_features_add = android_target.cpu_features_add,
         };
@@ -154,6 +154,9 @@ const supported_android_targets = [_]AndroidTargetQuery{
     // TODO(jae): 2024-09-08
     // This doesn't work for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
     // or similar. I might be messing something up here but not sure.
+    //
+    // TODO(jae): 2025-03-08
+    // Look into fixing: src/cpuinfo/SDL_cpuinfo.c:93:10: error: 'cpu-features.h' file not found
     // .{
     //     // arm-linux-androideabi
     //     .cpu_arch = .arm,

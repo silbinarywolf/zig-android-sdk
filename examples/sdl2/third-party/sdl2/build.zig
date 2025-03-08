@@ -72,89 +72,78 @@ pub fn build(b: *std.Build) !void {
             lib.linkFramework("CoreHaptics");
         },
         else => {
-            switch (target.result.abi) {
-                .android => {
+            if (target.result.abi.isAndroid()) {
+                lib.root_module.addCSourceFiles(.{
+                    .root = sdl_path,
+                    .files = &android_src_files,
+                });
+
+                // This is needed for "src/render/opengles/SDL_render_gles.c" to compile
+                lib.root_module.addCMacro("GL_GLEXT_PROTOTYPES", "1");
+
+                // Add Java files to dependency
+                const java_dir = sdl_dep.path("android-project/app/src/main/java/org/libsdl/app");
+                const java_files: []const []const u8 = &.{
+                    "SDL.java",
+                    "SDLSurface.java",
+                    "SDLActivity.java",
+                    "SDLAudioManager.java",
+                    "SDLControllerManager.java",
+                    "HIDDevice.java",
+                    "HIDDeviceUSB.java",
+                    "HIDDeviceManager.java",
+                    "HIDDeviceBLESteamController.java",
+                };
+                const java_write_files = b.addNamedWriteFiles("sdljava");
+                for (java_files) |java_file_basename| {
+                    _ = java_write_files.addCopyFile(java_dir.path(b, java_file_basename), java_file_basename);
+                }
+
+                // https://github.com/libsdl-org/SDL/blob/release-2.30.6/Android.mk#L82C62-L82C69
+                lib.linkSystemLibrary("dl");
+                lib.linkSystemLibrary("GLESv1_CM");
+                lib.linkSystemLibrary("GLESv2");
+                lib.linkSystemLibrary("OpenSLES");
+                lib.linkSystemLibrary("log");
+                lib.linkSystemLibrary("android");
+
+                // SDLActivity.java's getMainFunction defines the entrypoint as "SDL_main"
+                // So your main / root file will need something like this for Android
+                //
+                // fn android_sdl_main() callconv(.C) void {
+                //    _ = std.start.callMain();
+                // }
+                // comptime {
+                //    if (builtin.abi == .android) @export(android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
+                // }
+
+                // TODO(jae): 2025-03-08
+                // Need to investigate why hidapi is failing as of Zig 0.14.0
+                const use_hidapi = false;
+                if (!use_hidapi) {
+                    lib.root_module.addCMacro("SDL_HIDAPI_DISABLED", "");
+                } else {
+                    // NOTE(jae): 2024-09-22
+                    // Build settings taken from: src/hidapi/android/jni/Android.mk
+                    // SDLActivity.java by default expects to be able to load this library
                     lib.root_module.addCSourceFiles(.{
                         .root = sdl_path,
-                        .files = &android_src_files,
+                        .files = &[_][]const u8{
+                            "src/hidapi/android/hid.cpp",
+                        },
+                        .flags = &.{"-std=c++11"},
                     });
+                    lib.linkLibCpp();
+                }
+            } else {
+                const config_header = b.addConfigHeader(.{
+                    .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
+                    .include_path = "SDL/SDL_config.h",
+                }, .{});
+                sdl_config_header = config_header;
 
-                    // This is needed for "src/render/opengles/SDL_render_gles.c" to compile
-                    lib.root_module.addCMacro("GL_GLEXT_PROTOTYPES", "1");
-
-                    // Add Java files to dependency
-                    const java_dir = sdl_dep.path("android-project/app/src/main/java/org/libsdl/app");
-                    const java_files: []const []const u8 = &.{
-                        "SDL.java",
-                        "SDLSurface.java",
-                        "SDLActivity.java",
-                        "SDLAudioManager.java",
-                        "SDLControllerManager.java",
-                        "HIDDevice.java",
-                        "HIDDeviceUSB.java",
-                        "HIDDeviceManager.java",
-                        "HIDDeviceBLESteamController.java",
-                    };
-                    const java_write_files = b.addNamedWriteFiles("sdljava");
-                    for (java_files) |java_file_basename| {
-                        _ = java_write_files.addCopyFile(java_dir.path(b, java_file_basename), java_file_basename);
-                    }
-
-                    // https://github.com/libsdl-org/SDL/blob/release-2.30.6/Android.mk#L82C62-L82C69
-                    lib.linkSystemLibrary("dl");
-                    lib.linkSystemLibrary("GLESv1_CM");
-                    lib.linkSystemLibrary("GLESv2");
-                    lib.linkSystemLibrary("OpenSLES");
-                    lib.linkSystemLibrary("log");
-                    lib.linkSystemLibrary("android");
-
-                    // SDLActivity.java's getMainFunction defines the entrypoint as "SDL_main"
-                    // So your main / root file will need something like this for Android
-                    //
-                    // fn android_sdl_main() callconv(.C) void {
-                    //    _ = std.start.callMain();
-                    // }
-                    // comptime {
-                    //    if (builtin.abi == .android) @export(android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
-                    // }
-
-                    const use_hidapi = true;
-                    if (!use_hidapi) {
-                        lib.root_module.addCMacro("SDL_HIDAPI_DISABLED", "");
-                    } else {
-                        // NOTE(jae): 2024-09-22
-                        // Build settings taken from: src/hidapi/android/jni/Android.mk
-                        // SDLActivity.java by default expects to be able to load this library.
-                        const hidapi_lib = b.addSharedLibrary(.{
-                            .name = "hidapi",
-                            .target = target,
-                            .optimize = optimize,
-                            .link_libc = true,
-                        });
-                        hidapi_lib.addIncludePath(sdl_include_path);
-                        hidapi_lib.root_module.addCSourceFiles(.{
-                            .root = sdl_path,
-                            .files = &[_][]const u8{
-                                "src/hidapi/android/hid.cpp",
-                            },
-                            .flags = &.{"-std=c++11"},
-                        });
-                        hidapi_lib.linkSystemLibrary("log");
-                        hidapi_lib.linkLibCpp();
-                        lib.linkLibrary(hidapi_lib);
-                        b.installArtifact(hidapi_lib);
-                    }
-                },
-                else => {
-                    const config_header = b.addConfigHeader(.{
-                        .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
-                        .include_path = "SDL/SDL_config.h",
-                    }, .{});
-                    sdl_config_header = config_header;
-
-                    lib.addConfigHeader(config_header);
-                    lib.installConfigHeader(config_header);
-                },
+                lib.addConfigHeader(config_header);
+                lib.installConfigHeader(config_header);
             }
         },
     }
@@ -167,6 +156,8 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     var module = b.addModule("sdl", .{
+        .target = b.graph.host,
+        .optimize = .ReleaseFast,
         .root_source_file = b.path("src/sdl.zig"),
     });
     if (sdl_config_header) |config_header| {

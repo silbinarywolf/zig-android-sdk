@@ -52,7 +52,7 @@ Add the following to your build.zig.zon file and run `zig build`.
 ```zig
 .{
     .dependencies = .{
-        .@"zig-android-sdk" = .{
+        .android = .{
             .path = "https://github.com/silbinarywolf/zig-android-sdk/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz",
             // .hash = REPLACE_WITH_HASH_FROM_BUILD_ERROR
         },

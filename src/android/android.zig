@@ -306,7 +306,7 @@ pub const Panic = struct {
 
     fn dumpStackTrace(stack_trace: std.builtin.StackTrace) void {
         nosuspend {
-            if (comptime builtin.target.isWasm()) {
+            if (comptime builtin.target.cpu.arch.isWasm()) {
                 if (native_os == .wasi) {
                     const stderr = io.getStdErr().writer();
                     stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
@@ -341,7 +341,7 @@ pub const Panic = struct {
     const writeCurrentStackTrace = std.debug.writeCurrentStackTrace;
     fn dumpCurrentStackTrace(start_addr: ?usize) void {
         nosuspend {
-            if (comptime builtin.target.isWasm()) {
+            if (comptime builtin.target.cpu.arch.isWasm()) {
                 if (native_os == .wasi) {
                     const stderr = io.getStdErr().writer();
                     stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;

@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const android = @import("zig-android-sdk");
+const android = @import("android");
 
 pub fn build(b: *std.Build) void {
     const root_target = b.standardTargetOptions(.{});
@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) void {
 
     for (targets) |target| {
         const exe_name: []const u8 = "sdl-zig-demo";
-        var exe: *std.Build.Step.Compile = if (target.result.isAndroid()) b.addSharedLibrary(.{
+        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addSharedLibrary(.{
             .name = exe_name,
             .root_source_file = b.path("src/sdl-zig-demo.zig"),
             .target = target,
@@ -65,7 +65,7 @@ pub fn build(b: *std.Build) void {
                 .optimize = .ReleaseFast,
                 .target = target,
             });
-            if (target.result.os.tag == .linux and !target.result.isAndroid()) {
+            if (target.result.os.tag == .linux and !target.result.abi.isAndroid()) {
                 // The SDL package doesn't work for Linux yet, so we rely on system
                 // packages for now.
                 exe.linkSystemLibrary("SDL2");
@@ -75,12 +75,6 @@ pub fn build(b: *std.Build) void {
                 exe.linkLibrary(sdl_lib);
             }
 
-            // NOTE(jae): 2024-09-22
-            // Load additional dynamic libraries that SDLActivity.java loads such as hidapi
-            if (target.result.isAndroid()) {
-                exe.linkLibrary(sdl_dep.artifact("hidapi"));
-            }
-
             const sdl_module = sdl_dep.module("sdl");
             exe.root_module.addImport("sdl", sdl_module);
         }
@@ -88,9 +82,9 @@ pub fn build(b: *std.Build) void {
         // if building as library for Android, add this target
         // NOTE: Android has different CPU targets so you need to build a version of your
         //       code for x86, x86_64, arm, arm64 and more
-        if (target.result.isAndroid()) {
+        if (target.result.abi.isAndroid()) {
             const apk: *android.APK = android_apk orelse @panic("Android APK should be initialized");
-            const android_dep = b.dependency("zig-android-sdk", .{
+            const android_dep = b.dependency("android", .{
                 .optimize = optimize,
                 .target = target,
             });
