@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const android = @import("zig-android-sdk");
+const android = @import("android");
 
 pub fn build(b: *std.Build) void {
     const exe_name: []const u8 = "minimal";
@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
         const android_tools = android.Tools.create(b, .{
             .api_level = .android15,
             .build_tools_version = "35.0.0",
-            .ndk_version = "27.0.12077973",
+            .ndk_version = "29.0.13113456",
         });
         const apk = android.APK.create(b, android_tools);
 
@@ -52,9 +52,9 @@ pub fn build(b: *std.Build) void {
         // if building as library for Android, add this target
         // NOTE: Android has different CPU targets so you need to build a version of your
         //       code for x86, x86_64, arm, arm64 and more
-        if (target.result.isAndroid()) {
+        if (target.result.abi == .android) {
             const apk: *android.APK = android_apk orelse @panic("Android APK should be initialized");
-            const android_dep = b.dependency("zig-android-sdk", .{
+            const android_dep = b.dependency("android", .{
                 .optimize = optimize,
                 .target = target,
             });
