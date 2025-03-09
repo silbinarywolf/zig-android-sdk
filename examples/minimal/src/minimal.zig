@@ -5,7 +5,7 @@ const androidbind = @import("android-bind.zig");
 const log = std.log;
 
 /// custom standard options for Android
-pub const std_options: std.Options = if (builtin.abi.isAndroid())
+pub const std_options: std.Options = if (builtin.abi == .android)
     .{
         .logFn = android.logFn,
     }
@@ -13,7 +13,7 @@ else
     .{};
 
 /// custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid())
+pub const panic = if (builtin.abi == .android)
     android.panic
 else
     std.builtin.default_panic;
