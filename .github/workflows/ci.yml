@@ -19,7 +19,6 @@ jobs:
         include:
           - os: "ubuntu-22.04"
           - os: "windows-latest"
-          - os: "macos-12" # x86_64
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
 
     runs-on: ${{matrix.os}}
@@ -38,7 +37,7 @@ jobs:
       with:
         packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456'
 
-    - name: Setup Zig 0.14.0
+    - name: Setup Zig Stable (0.14.0)
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
       # see: https://ziglang.org/news/migrate-to-self-hosting/
@@ -46,11 +45,11 @@ jobs:
       with:
         version: "0.14.0"
 
-    - name: Build Minimal Example (Zig Nightly)
+    - name: Build Minimal Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (Zig Nightly)
+    - name: Build SDL2 Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
