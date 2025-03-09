@@ -72,89 +72,88 @@ pub fn build(b: *std.Build) !void {
             lib.linkFramework("CoreHaptics");
         },
         else => {
-            switch (target.result.abi) {
-                .android => {
-                    lib.root_module.addCSourceFiles(.{
-                        .root = sdl_path,
-                        .files = &android_src_files,
-                    });
+            if (target.result.abi == .android) {
+                lib.root_module.addCSourceFiles(.{
+                    .root = sdl_path,
+                    .files = &android_src_files,
+                });
 
-                    // This is needed for "src/render/opengles/SDL_render_gles.c" to compile
-                    lib.root_module.addCMacro("GL_GLEXT_PROTOTYPES", "1");
+                // This is needed for "src/render/opengles/SDL_render_gles.c" to compile
+                lib.root_module.addCMacro("GL_GLEXT_PROTOTYPES", "1");
 
-                    // Add Java files to dependency
-                    const java_dir = sdl_dep.path("android-project/app/src/main/java/org/libsdl/app");
-                    const java_files: []const []const u8 = &.{
-                        "SDL.java",
-                        "SDLSurface.java",
-                        "SDLActivity.java",
-                        "SDLAudioManager.java",
-                        "SDLControllerManager.java",
-                        "HIDDevice.java",
-                        "HIDDeviceUSB.java",
-                        "HIDDeviceManager.java",
-                        "HIDDeviceBLESteamController.java",
-                    };
-                    const java_write_files = b.addNamedWriteFiles("sdljava");
-                    for (java_files) |java_file_basename| {
-                        _ = java_write_files.addCopyFile(java_dir.path(b, java_file_basename), java_file_basename);
-                    }
+                // Add Java files to dependency
+                const java_dir = sdl_dep.path("android-project/app/src/main/java/org/libsdl/app");
+                const java_files: []const []const u8 = &.{
+                    "SDL.java",
+                    "SDLSurface.java",
+                    "SDLActivity.java",
+                    "SDLAudioManager.java",
+                    "SDLControllerManager.java",
+                    "HIDDevice.java",
+                    "HIDDeviceUSB.java",
+                    "HIDDeviceManager.java",
+                    "HIDDeviceBLESteamController.java",
+                };
+                const java_write_files = b.addNamedWriteFiles("sdljava");
+                for (java_files) |java_file_basename| {
+                    _ = java_write_files.addCopyFile(java_dir.path(b, java_file_basename), java_file_basename);
+                }
 
-                    // https://github.com/libsdl-org/SDL/blob/release-2.30.6/Android.mk#L82C62-L82C69
-                    lib.linkSystemLibrary("dl");
-                    lib.linkSystemLibrary("GLESv1_CM");
-                    lib.linkSystemLibrary("GLESv2");
-                    lib.linkSystemLibrary("OpenSLES");
-                    lib.linkSystemLibrary("log");
-                    lib.linkSystemLibrary("android");
+                // https://github.com/libsdl-org/SDL/blob/release-2.30.6/Android.mk#L82C62-L82C69
+                lib.linkSystemLibrary("dl");
+                lib.linkSystemLibrary("GLESv1_CM");
+                lib.linkSystemLibrary("GLESv2");
+                lib.linkSystemLibrary("OpenSLES");
+                lib.linkSystemLibrary("log");
+                lib.linkSystemLibrary("android");
 
-                    // SDLActivity.java's getMainFunction defines the entrypoint as "SDL_main"
-                    // So your main / root file will need something like this for Android
-                    //
-                    // fn android_sdl_main() callconv(.C) void {
-                    //    _ = std.start.callMain();
-                    // }
-                    // comptime {
-                    //    if (builtin.abi == .android) @export(android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
-                    // }
+                // SDLActivity.java's getMainFunction defines the entrypoint as "SDL_main"
+                // So your main / root file will need something like this for Android
+                //
+                // fn android_sdl_main() callconv(.C) void {
+                //    _ = std.start.callMain();
+                // }
+                // comptime {
+                //    if (builtin.abi == .android) @export(android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
+                // }
 
-                    const use_hidapi = true;
-                    if (!use_hidapi) {
-                        lib.root_module.addCMacro("SDL_HIDAPI_DISABLED", "");
-                    } else {
-                        // NOTE(jae): 2024-09-22
-                        // Build settings taken from: src/hidapi/android/jni/Android.mk
-                        // SDLActivity.java by default expects to be able to load this library.
-                        const hidapi_lib = b.addSharedLibrary(.{
-                            .name = "hidapi",
-                            .target = target,
-                            .optimize = optimize,
-                            .link_libc = true,
-                        });
-                        hidapi_lib.addIncludePath(sdl_include_path);
-                        hidapi_lib.root_module.addCSourceFiles(.{
-                            .root = sdl_path,
-                            .files = &[_][]const u8{
-                                "src/hidapi/android/hid.cpp",
-                            },
-                            .flags = &.{"-std=c++11"},
-                        });
-                        hidapi_lib.linkSystemLibrary("log");
-                        hidapi_lib.linkLibCpp();
-                        lib.linkLibrary(hidapi_lib);
-                        b.installArtifact(hidapi_lib);
-                    }
-                },
-                else => {
-                    const config_header = b.addConfigHeader(.{
-                        .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
-                        .include_path = "SDL/SDL_config.h",
-                    }, .{});
-                    sdl_config_header = config_header;
+                const hidapi_lib = b.addStaticLibrary(.{
+                    .name = "hidapi",
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                });
+                hidapi_lib.addIncludePath(sdl_include_path);
 
-                    lib.addConfigHeader(config_header);
-                    lib.installConfigHeader(config_header);
-                },
+                // Avoid linking with linkLibCpp() as that causes issues as Zig 0.14.0 attempts to mix
+                // its own C++ includes with those auto-included by the Zig Android SDK.
+                //
+                // However, not linking c++ means when loading on X86_64 systems, you get
+                // unresolved symbol "_Unwind_Resume" when SDL2 is loaded, so to workaround that
+                // we link the "unwind" library
+                hidapi_lib.linkSystemLibrary("unwind");
+
+                // NOTE(jae): 2024-09-22
+                // Build settings taken from: SDL2-2.32.2/src/hidapi/android/jni/Android.mk
+                // SDLActivity.java by default expects to be able to load this library
+                hidapi_lib.root_module.linkSystemLibrary("log", .{});
+                hidapi_lib.root_module.addCSourceFiles(.{
+                    .root = sdl_path,
+                    .files = &[_][]const u8{
+                        "src/hidapi/android/hid.cpp",
+                    },
+                    .flags = &.{"-std=c++11"},
+                });
+                lib.linkLibrary(hidapi_lib);
+            } else {
+                const config_header = b.addConfigHeader(.{
+                    .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
+                    .include_path = "SDL/SDL_config.h",
+                }, .{});
+                sdl_config_header = config_header;
+
+                lib.addConfigHeader(config_header);
+                lib.installConfigHeader(config_header);
             }
         },
     }
@@ -167,6 +166,8 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     var module = b.addModule("sdl", .{
+        .target = b.graph.host,
+        .optimize = .ReleaseFast,
         .root_source_file = b.path("src/sdl.zig"),
     });
     if (sdl_config_header) |config_header| {

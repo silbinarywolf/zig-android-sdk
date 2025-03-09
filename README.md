@@ -18,7 +18,7 @@ zig build -Dandroid=true
 ```zig
 // This is an overly simplified example to give you the gist
 // of how this library works, see: examples/minimal/build.zig
-const android = @import("zig-android-sdk");
+const android = @import("android");
 
 pub fn build(b: *std.Build) !void {
     const android_tools = android.Tools.create(b, ...);
@@ -52,7 +52,7 @@ Add the following to your build.zig.zon file and run `zig build`.
 ```zig
 .{
     .dependencies = .{
-        .@"zig-android-sdk" = .{
+        .android = .{
             .path = "https://github.com/silbinarywolf/zig-android-sdk/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz",
             // .hash = REPLACE_WITH_HASH_FROM_BUILD_ERROR
         },

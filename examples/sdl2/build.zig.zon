@@ -1,8 +1,8 @@
 .{
-    .name = "minimal",
+    .name = "sdl2",
     .version = "0.0.0",
     .dependencies = .{
-        .@"zig-android-sdk" = .{
+        .android = .{
             .path = "../..",
         },
         .sdl2 = .{
@@ -14,4 +14,5 @@
         "build.zig.zon",
         "src",
     },
+    .fingerprint = 0x168fc6b9a7d0df48,
 }

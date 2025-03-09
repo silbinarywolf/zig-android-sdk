@@ -130,7 +130,11 @@ const AndroidTargetQuery = struct {
         return .{
             .os_tag = .linux,
             .cpu_model = .baseline,
-            .abi = .android,
+            .abi = comptime if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)
+                // NOTE(jae): 2025-03-09
+                // Zig 0.13.0 doesn't have androideabi
+                .android
+            else if (android_target.cpu_arch != .arm) .android else .androideabi,
             .cpu_arch = android_target.cpu_arch,
             .cpu_features_add = android_target.cpu_features_add,
         };
@@ -151,9 +155,8 @@ const supported_android_targets = [_]AndroidTargetQuery{
         .cpu_arch = .aarch64,
         .cpu_features_add = Target.aarch64.featureSet(&.{.v8a}),
     },
-    // TODO(jae): 2024-09-08
-    // This doesn't work for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
-    // or similar. I might be messing something up here but not sure.
+    // NOTE(jae): 2024-09-08
+    // 'arm-linux-androideabi' doesn't work with Zig 0.13.0 for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
     // .{
     //     // arm-linux-androideabi
     //     .cpu_arch = .arm,
