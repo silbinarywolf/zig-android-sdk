@@ -151,15 +151,11 @@ const supported_android_targets = [_]AndroidTargetQuery{
         .cpu_arch = .aarch64,
         .cpu_features_add = Target.aarch64.featureSet(&.{.v8a}),
     },
-    // TODO(jae): 2024-09-08
-    // This doesn't work for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
-    // or similar. I might be messing something up here but not sure.
-    //
-    // TODO(jae): 2025-03-08
-    // Look into fixing: src/cpuinfo/SDL_cpuinfo.c:93:10: error: 'cpu-features.h' file not found
-    // .{
-    //     // arm-linux-androideabi
-    //     .cpu_arch = .arm,
-    //     .cpu_features_add = Target.arm.featureSet(&.{.v7a}),
-    // },
+    // NOTE(jae): 2024-09-08
+    // 'arm-linux-androideabi' previously didn't work with Zig 0.13.0 for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
+    .{
+        // arm-linux-androideabi
+        .cpu_arch = .arm,
+        .cpu_features_add = Target.arm.featureSet(&.{.v7a}),
+    },
 };

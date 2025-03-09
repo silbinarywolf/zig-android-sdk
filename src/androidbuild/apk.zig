@@ -129,6 +129,19 @@ pub const APK = struct {
         // - "java.lang.UnsatisfiedLinkError: dlopen failed: TLS symbol "_ZZN8gwp_asan15getThreadLocalsEvE6Locals" in dlopened"
         const android_api_version: u32 = @intFromEnum(apk.tools.api_level);
 
+        // NOTE(jae): 2025-03-09
+        // Resolve issue where building SDL2 gets the following error for 'arm-linux-androideabi'
+        // SDL2-2.32.2/src/cpuinfo/SDL_cpuinfo.c:93:10: error: 'cpu-features.h' file not found
+        //
+        // This include is specifically needed for: #if defined(__ANDROID__) && defined(__arm__) && !defined(HAVE_GETAUXVAL)
+        //
+        // ie. $ANDROID_HOME/ndk/{ndk_version}/sources/android/cpufeatures
+        if (module.resolved_target) |resolved_target| {
+            if (resolved_target.result.cpu.arch == .arm) {
+                module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.tools.android_sdk_path, apk.tools.ndk_version }) });
+            }
+        }
+
         // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ usr/lib/aarch64-linux-android/35
         module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}/{d}", .{ android_ndk_sysroot, system_target, android_api_version }) });
         // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ /usr/lib/aarch64-linux-android

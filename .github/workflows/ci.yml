@@ -36,21 +36,21 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;27.0.12077973'
+        packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456'
 
-    - name: Setup Zig 0.13.0
+    - name: Setup Zig 0.14.0
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
       # see: https://ziglang.org/news/migrate-to-self-hosting/
       uses: mlugg/setup-zig@v1
       with:
-        version: "0.13.0"
+        version: "0.14.0"
 
-    - name: Build Minimal Example (Zig 0.13.0)
+    - name: Build Minimal Example (Zig Nightly)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (Zig 0.13.0)
+    - name: Build SDL2 Example (Zig Nightly)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
@@ -64,11 +64,5 @@ jobs:
       working-directory: examples/minimal
 
     - name: Build SDL2 Example (Zig Nightly)
-      # "zig build -Dandroid=true" fails for 0.14.0-dev.1632
-      #
-      # android/sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42:
-      # error: expression is not an integral constant expression
-      #
-      # See: https://github.com/silbinarywolf/zig-android-sdk/actions/runs/10979711793/job/30484520174?pr=5#step:10:30
-      run: zig build -Dtarget=x86_64-linux-android --verbose
+      run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2

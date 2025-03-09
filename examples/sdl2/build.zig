@@ -21,7 +21,16 @@ pub fn build(b: *std.Build) void {
         const android_tools = android.Tools.create(b, .{
             .api_level = .android15,
             .build_tools_version = "35.0.0",
-            .ndk_version = "27.0.12077973",
+            .ndk_version = "29.0.13113456",
+            // NOTE(jae): 2025-03-09
+            // Previously this example used 'ndk' "27.0.12077973".
+            //
+            // However that has issues with the latest SDL2 version when including 'hardware_buffer.h'
+            // for 32-bit builds.
+            //
+            // - AHARDWAREBUFFER_USAGE_FRONT_BUFFER = 1UL << 32
+            //  - ndk/27.0.12077973/toolchains/llvm/prebuilt/{OS}-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42:
+            //  - error: expression is not an integral constant expression
         });
         const apk = android.APK.create(b, android_tools);
 

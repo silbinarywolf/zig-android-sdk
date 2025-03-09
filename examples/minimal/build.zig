@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
         const android_tools = android.Tools.create(b, .{
             .api_level = .android15,
             .build_tools_version = "35.0.0",
-            .ndk_version = "27.0.12077973",
+            .ndk_version = "29.0.13113456",
         });
         const apk = android.APK.create(b, android_tools);
 
