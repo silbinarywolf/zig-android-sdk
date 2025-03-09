@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) !void {
     const sdl_path = sdl_dep.path("");
     const sdl_include_path = sdl_path.path(b, "include");
 
-    const is_shared_library = target.result.abi == .android; // NOTE(jae): 2024-09-22: Android uses shared library as SDL2 loads it as part of SDLActivity.java
+    const is_shared_library = target.result.abi.isAndroid(); // NOTE(jae): 2024-09-22: Android uses shared library as SDL2 loads it as part of SDLActivity.java
     const lib = if (!is_shared_library) b.addStaticLibrary(.{
         .name = "SDL2",
         .target = target,
@@ -117,24 +117,34 @@ pub fn build(b: *std.Build) !void {
                 //    if (builtin.abi == .android) @export(android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
                 // }
 
-                // TODO(jae): 2025-03-08
-                // Need to investigate why hidapi is failing as of Zig 0.14.0
-                const use_hidapi = false;
-                if (!use_hidapi) {
-                    lib.root_module.addCMacro("SDL_HIDAPI_DISABLED", "");
-                } else {
-                    // NOTE(jae): 2024-09-22
-                    // Build settings taken from: src/hidapi/android/jni/Android.mk
-                    // SDLActivity.java by default expects to be able to load this library
-                    lib.root_module.addCSourceFiles(.{
-                        .root = sdl_path,
-                        .files = &[_][]const u8{
-                            "src/hidapi/android/hid.cpp",
-                        },
-                        .flags = &.{"-std=c++11"},
-                    });
-                    lib.linkLibCpp();
-                }
+                const hidapi_lib = b.addStaticLibrary(.{
+                    .name = "hidapi",
+                    .target = target,
+                    .optimize = optimize,
+                    .link_libc = true,
+                });
+                hidapi_lib.addIncludePath(sdl_include_path);
+
+                // Avoid linking with linkLibCpp() as that causes issues as Zig 0.14.0 attempts to mix
+                // its own C++ includes with those auto-included by the Zig Android SDK.
+                //
+                // However, not linking c++ means when loading on X86_64 systems, you get
+                // unresolved symbol "_Unwind_Resume" when SDL2 is loaded, so to workaround that
+                // we link the "unwind" library
+                hidapi_lib.linkSystemLibrary("unwind");
+
+                // NOTE(jae): 2024-09-22
+                // Build settings taken from: SDL2-2.32.2/src/hidapi/android/jni/Android.mk
+                // SDLActivity.java by default expects to be able to load this library
+                hidapi_lib.root_module.linkSystemLibrary("log", .{});
+                hidapi_lib.root_module.addCSourceFiles(.{
+                    .root = sdl_path,
+                    .files = &[_][]const u8{
+                        "src/hidapi/android/hid.cpp",
+                    },
+                    .flags = &.{"-std=c++11"},
+                });
+                lib.linkLibrary(hidapi_lib);
             } else {
                 const config_header = b.addConfigHeader(.{
                     .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },

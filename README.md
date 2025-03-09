@@ -18,7 +18,7 @@ zig build -Dandroid=true
 ```zig
 // This is an overly simplified example to give you the gist
 // of how this library works, see: examples/minimal/build.zig
-const android = @import("zig-android-sdk");
+const android = @import("android");
 
 pub fn build(b: *std.Build) !void {
     const android_tools = android.Tools.create(b, ...);
