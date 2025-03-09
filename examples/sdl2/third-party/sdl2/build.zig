@@ -9,7 +9,7 @@ pub fn build(b: *std.Build) !void {
     const sdl_path = sdl_dep.path("");
     const sdl_include_path = sdl_path.path(b, "include");
 
-    const is_shared_library = target.result.abi == .android; // NOTE(jae): 2024-09-22: Android uses shared library as SDL2 loads it as part of SDLActivity.java
+    const is_shared_library = target.result.abi.isAndroid(); // NOTE(jae): 2024-09-22: Android uses shared library as SDL2 loads it as part of SDLActivity.java
     const lib = if (!is_shared_library) b.addStaticLibrary(.{
         .name = "SDL2",
         .target = target,
@@ -72,7 +72,7 @@ pub fn build(b: *std.Build) !void {
             lib.linkFramework("CoreHaptics");
         },
         else => {
-            if (target.result.abi == .android) {
+            if (target.result.abi.isAndroid()) {
                 lib.root_module.addCSourceFiles(.{
                     .root = sdl_path,
                     .files = &android_src_files,

@@ -1,5 +1,5 @@
 .{
-    .name = "minimal",
+    .name = .minimal,
     .version = "0.0.0",
     .dependencies = .{
         .android = .{

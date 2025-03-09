@@ -45,7 +45,7 @@ pub const KeyStore = struct {
 };
 
 pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]const u8 {
-    if (target.result.abi != .android) return error.InvalidAndroidTarget;
+    if (!target.result.abi.isAndroid()) return error.InvalidAndroidTarget;
     return switch (target.result.cpu.arch) {
         .x86 => "i686-linux-android",
         .x86_64 => "x86_64-linux-android",
@@ -66,7 +66,7 @@ pub fn standardTargets(b: *std.Build, target: ResolvedTarget) []ResolvedTarget {
     if (all_targets) {
         return getAllAndroidTargets(b);
     }
-    if (target.result.abi != .android) {
+    if (!target.result.abi.isAndroid()) {
         return &[0]ResolvedTarget{};
     }
     if (target.result.os.tag != .linux) {
@@ -130,11 +130,7 @@ const AndroidTargetQuery = struct {
         return .{
             .os_tag = .linux,
             .cpu_model = .baseline,
-            .abi = comptime if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)
-                // NOTE(jae): 2025-03-09
-                // Zig 0.13.0 doesn't have androideabi
-                .android
-            else if (android_target.cpu_arch != .arm) .android else .androideabi,
+            .abi = if (android_target.cpu_arch != .arm) .android else .androideabi,
             .cpu_arch = android_target.cpu_arch,
             .cpu_features_add = android_target.cpu_features_add,
         };
@@ -156,10 +152,10 @@ const supported_android_targets = [_]AndroidTargetQuery{
         .cpu_features_add = Target.aarch64.featureSet(&.{.v8a}),
     },
     // NOTE(jae): 2024-09-08
-    // 'arm-linux-androideabi' doesn't work with Zig 0.13.0 for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
-    // .{
-    //     // arm-linux-androideabi
-    //     .cpu_arch = .arm,
-    //     .cpu_features_add = Target.arm.featureSet(&.{.v7a}),
-    // },
+    // 'arm-linux-androideabi' previously didn't work with Zig 0.13.0 for compiling C code like SDL2 or OpenXR due to "__ARM_ARCH" not being "7"
+    .{
+        // arm-linux-androideabi
+        .cpu_arch = .arm,
+        .cpu_features_add = Target.arm.featureSet(&.{.v7a}),
+    },
 };

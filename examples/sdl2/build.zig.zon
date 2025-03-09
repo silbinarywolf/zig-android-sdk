@@ -1,5 +1,5 @@
 .{
-    .name = "sdl2",
+    .name = .sdl2,
     .version = "0.0.0",
     .dependencies = .{
         .android = .{

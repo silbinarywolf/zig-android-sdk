@@ -193,7 +193,7 @@ pub const APK = struct {
                         }
                     }
                     if (artifact.root_module.resolved_target) |target| {
-                        if (target.result.abi != .android) {
+                        if (!target.result.abi.isAndroid()) {
                             try errors.append(b.fmt("artifact[{}]: must be targetting Android abi", .{i}));
                             continue;
                         }
@@ -392,7 +392,7 @@ pub const APK = struct {
                     }
                 }
                 apk.tools.setLibCFile(artifact);
-                apk.addLibraryPaths(&artifact.root_module);
+                apk.addLibraryPaths(artifact.root_module);
                 artifact.linkLibC();
             }
 
@@ -629,7 +629,7 @@ pub const APK = struct {
                             }
 
                             // Add library paths to find "android", "log", etc
-                            apk.addLibraryPaths(&artifact.root_module);
+                            apk.addLibraryPaths(artifact.root_module);
 
                             // Update libraries linked to this library
                             apk.updateLinkObjects(artifact, so_dir, raw_top_level_apk_files);
