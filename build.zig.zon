@@ -7,5 +7,6 @@
         "build.zig.zon",
         "src",
     },
+    .minimum_zig_version = "0.14.0",
     .fingerprint = 0x92bcb62d42fb2cee,
 }
