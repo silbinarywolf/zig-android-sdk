@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
 
         // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
         const sdl_dep = b.dependency("sdl2", .{
-            .optimize = .ReleaseFast,
+            .optimize = optimize,
             .target = android_targets[0],
         });
         const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
@@ -68,10 +68,18 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
 
+        const library_optimize = if (!target.result.abi.isAndroid())
+            optimize
+        else
+            // In Zig 0.14.0, for Android builds, make sure we build libraries with ReleaseSafe
+            // otherwise we get errors relating to libubsan_rt.a getting RELOCATION errors
+            // https://github.com/silbinarywolf/zig-android-sdk/issues/18
+            if (optimize == .Debug) .ReleaseSafe else optimize;
+
         // add SDL2
         {
             const sdl_dep = b.dependency("sdl2", .{
-                .optimize = .ReleaseFast,
+                .optimize = library_optimize,
                 .target = target,
             });
             if (target.result.os.tag == .linux and !target.result.abi.isAndroid()) {
