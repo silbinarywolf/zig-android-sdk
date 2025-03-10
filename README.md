@@ -2,8 +2,6 @@
 
 ![Continuous integration](https://github.com/silbinarywolf/zig-android-sdk/actions/workflows/ci.yml/badge.svg)
 
-⚠️ **WARNING:** This is a work-in-progress and will be updated as I improve it for my personal SDL2 / OpenXR project.
-
 This library allows you to setup and build an APK for your Android devices. This project was mostly based off the work of [ikskuh](https://github.com/ikskuh) and wouldn't exist without the work they did on the [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) project.
 
 
