@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
 
         // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
         const sdl_dep = b.dependency("sdl2", .{
-            .optimize = library_optimize,
+            .optimize = optimize,
             .target = android_targets[0],
         });
         const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
