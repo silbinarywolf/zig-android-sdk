@@ -18,14 +18,20 @@ else
 pub const panic = if (builtin.abi.isAndroid())
     android.panic
 else
-    std.builtin.default_panic;
+    std.debug.FullPanic(std.debug.defaultPanic);
+
+comptime {
+    if (builtin.abi.isAndroid()) {
+        @export(&SDL_main, .{ .name = "SDL_main", .linkage = .strong });
+    }
+}
 
 /// This needs to be exported for Android builds
-export fn SDL_main() callconv(.C) void {
-    if (builtin.abi.isAndroid()) {
+fn SDL_main() callconv(.C) void {
+    if (comptime builtin.abi.isAndroid()) {
         _ = std.start.callMain();
     } else {
-        @panic("SDL_main should not be called outside of Android builds");
+        @compileError("SDL_main should not be called outside of Android builds");
     }
 }
 

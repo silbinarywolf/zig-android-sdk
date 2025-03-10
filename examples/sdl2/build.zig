@@ -7,6 +7,14 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const android_targets = android.standardTargets(b, root_target);
 
+    const library_optimize = if (android_targets.len == 0)
+        optimize
+    else
+        // For Android builds, make sure we build libraries with ReleaseSafe
+        // otherwise we get errors relating to libubsan_rt.a getting RELOCATION errors
+        // https://github.com/silbinarywolf/zig-android-sdk/issues/18
+        if (optimize == .Debug) .ReleaseSafe else optimize;
+
     var root_target_single = [_]std.Build.ResolvedTarget{root_target};
     const targets: []std.Build.ResolvedTarget = if (android_targets.len == 0)
         root_target_single[0..]
@@ -44,7 +52,7 @@ pub fn build(b: *std.Build) void {
 
         // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
         const sdl_dep = b.dependency("sdl2", .{
-            .optimize = .ReleaseFast,
+            .optimize = library_optimize,
             .target = android_targets[0],
         });
         const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
@@ -71,7 +79,7 @@ pub fn build(b: *std.Build) void {
         // add SDL2
         {
             const sdl_dep = b.dependency("sdl2", .{
-                .optimize = .ReleaseFast,
+                .optimize = library_optimize,
                 .target = target,
             });
             if (target.result.os.tag == .linux and !target.result.abi.isAndroid()) {

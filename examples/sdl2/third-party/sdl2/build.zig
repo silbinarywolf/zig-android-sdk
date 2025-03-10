@@ -31,6 +31,10 @@ pub fn build(b: *std.Build) !void {
     var sdl_config_header: ?*std.Build.Step.ConfigHeader = null;
     switch (target.result.os.tag) {
         .windows => {
+            // Between Zig 0.13.0 and Zig 0.14.0, "windows.gaming.input.h" was removed from "lib/libc/include/any-windows-any"
+            // This folder brings all headers needed by that one file so that SDL can be compiled for Windows.
+            lib.addIncludePath(b.path("upstream/any-windows-any"));
+
             lib.addCSourceFiles(.{
                 .root = sdl_path,
                 .files = &windows_src_files,
@@ -114,7 +118,7 @@ pub fn build(b: *std.Build) !void {
                 //    _ = std.start.callMain();
                 // }
                 // comptime {
-                //    if (builtin.abi == .android) @export(android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
+                //    if (builtin.abi.isAndroid()) @export(&android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
                 // }
 
                 const hidapi_lib = b.addStaticLibrary(.{

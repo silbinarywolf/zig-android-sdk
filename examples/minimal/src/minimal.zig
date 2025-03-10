@@ -16,7 +16,7 @@ else
 pub const panic = if (builtin.abi.isAndroid())
     android.panic
 else
-    std.builtin.default_panic;
+    std.debug.FullPanic(std.debug.defaultPanic);
 
 fn nativeActivityOnCreate(activity: *androidbind.ANativeActivity, savedState: []const u8) !void {
     const sdk_version: c_int = blk: {

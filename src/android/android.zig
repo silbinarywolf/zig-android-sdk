@@ -16,7 +16,7 @@ const android_builtin = struct {
 extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
-pub const panic = Panic.panic;
+pub const panic = std.debug.FullPanic(Panic.panic);
 
 /// Levels for Android
 pub const Level = enum(u8) {
@@ -148,12 +148,12 @@ const LogWriter = struct {
 
 /// Panic is a copy-paste of the panic logic from Zig but replaces usages of getStdErr with our own writer
 ///
-/// Example output:
+/// Example output (Zig 0.13.0):
 /// 09-22 13:08:49.578  3390  3390 F com.zig.minimal: thread 3390 panic: your panic message here
 /// 09-22 13:08:49.637  3390  3390 F com.zig.minimal: zig-android-sdk/examples\minimal/src/minimal.zig:33:15: 0x7ccb77b282dc in nativeActivityOnCreate (minimal)
 /// 09-22 13:08:49.637  3390  3390 F com.zig.minimal: zig-android-sdk/examples/minimal/src/minimal.zig:84:27: 0x7ccb77b28650 in ANativeActivity_onCreate (minimal)
 /// 09-22 13:08:49.637  3390  3390 F com.zig.minimal: ???:?:?: 0x7ccea4021d9c in ??? (libandroid_runtime.so)
-pub const Panic = struct {
+const Panic = struct {
     /// Non-zero whenever the program triggered a panic.
     /// The counter is incremented/decremented atomically.
     var panicking = std.atomic.Value(u8).init(0);
@@ -165,9 +165,9 @@ pub const Panic = struct {
     /// This is used to catch and handle panics triggered by the panic handler.
     threadlocal var panic_stage: usize = 0;
 
-    pub fn panic(message: []const u8, stack_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    fn panic(message: []const u8, ret_addr: ?usize) noreturn {
         const first_trace_addr = ret_addr orelse @returnAddress();
-        panicImpl(stack_trace, first_trace_addr, message);
+        panicImpl(first_trace_addr, message);
     }
 
     /// Must be called only after adding 1 to `panicking`. There are three callsites.
@@ -235,7 +235,7 @@ pub const Panic = struct {
     ///
     /// - Provide custom "io" namespace so we can easily customize getStdErr() to be our own writer
     /// - Provide other functions from std.debug.*
-    fn panicImpl(trace: ?*const std.builtin.StackTrace, first_trace_addr: ?usize, msg: []const u8) noreturn {
+    fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
         // NOTE(jae): 2024-09-22
         // Cannot mark this as cold(true) OR setCold() depending on Zig version as we get an invalid builtin function
         // comptime {
@@ -271,9 +271,7 @@ pub const Panic = struct {
                         stderr.print("thread {} panic: ", .{current_thread_id}) catch posix.abort();
                     }
                     stderr.print("{s}\n", .{msg}) catch posix.abort();
-                    if (trace) |t| {
-                        dumpStackTrace(t.*);
-                    }
+                    if (@errorReturnTrace()) |t| dumpStackTrace(t.*);
                     dumpCurrentStackTrace(first_trace_addr);
                 }
 

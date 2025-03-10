@@ -652,22 +652,17 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
         @panic("can only call updateSharedLibraryOptions if linkage is dynamic");
     }
 
-    // NOTE(jae): 2024-09-01
-    // Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
-    // Do we need all these?
-    // artifact.link_emit_relocs = true; // Retains all relocations in the executable file. This results in larger executable files
-    artifact.link_eh_frame_hdr = true;
-    artifact.root_module.pic = true;
-    artifact.link_function_sections = true;
     // NOTE(jae): 2024-09-22
     // Need compiler_rt even for C code, for example aarch64 can fail to load on Android when compiling SDL2
     // because it's missing "__aarch64_cas8_acq_rel"
-    artifact.bundle_compiler_rt = true;
+    if (artifact.bundle_compiler_rt == null) {
+        artifact.bundle_compiler_rt = true;
+    }
+
     if (artifact.root_module.optimize) |optimize| {
         // NOTE(jae): ZigAndroidTemplate used: (optimize == .ReleaseSmall);
         artifact.root_module.strip = optimize == .ReleaseSmall;
     }
-    artifact.export_table = true;
 
     // TODO(jae): 2024-09-19 - Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
     // Remove when https://github.com/ziglang/zig/issues/7935 is resolved.
@@ -685,4 +680,22 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
             }
         }
     }
+
+    // NOTE(jae): 2024-09-01
+    // Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
+    // Do we need all these?
+    //
+    // NOTE(jae): 2025-03-10
+    // Seemingly not "needed" anymore, at least for x86_64 Android builds
+    // Keeping this code here incase I want to backport to Zig 0.13.0 and it's needed.
+    //
+    // if (artifact.root_module.pic == null) {
+    //     artifact.root_module.pic = true;
+    // }
+    // artifact.link_emit_relocs = true; // Retains all relocations in the executable file. This results in larger executable files
+    // artifact.link_eh_frame_hdr = true;
+    // artifact.link_function_sections = true;
+    // Seemingly not "needed" anymore, at least for x86_64 Android builds
+    // artifact.export_table = true;
+
 }
