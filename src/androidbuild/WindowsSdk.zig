@@ -1,6 +1,5 @@
-// NOTE(jae): 2024-09-15
-// Copy paste of lib/std/zig/WindowsSdk.zig but cutdown to only use Registry functions
-
+//! NOTE(jae): 2024-09-15
+//! Copy paste of lib/std/zig/WindowsSdk.zig but cutdown to only use Registry functions
 const WindowsSdk = @This();
 const std = @import("std");
 const builtin = @import("builtin");
