@@ -18,6 +18,348 @@ const Step = Build.Step;
 const ResolvedTarget = Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
 
+b: *Build,
+
+/// On most platforms this will map to the $ANDROID_HOME environment variable
+android_sdk_path: []const u8,
+/// ie. .android15 = 35 (android 15 uses API version 35)
+api_level: APILevel,
+/// ie. "27.0.12077973"
+ndk_version: []const u8,
+/// ie. "$ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot"
+ndk_sysroot_path: []const u8,
+/// ie. "$ANDROID_HOME/Sdk/platforms/android-{api_level}/android.jar"
+root_jar: []const u8,
+// $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
+jdk_path: []const u8,
+/// ie. $ANDROID_HOME/build-tools/35.0.0
+build_tools: struct {
+    aapt2: []const u8,
+    zipalign: []const u8,
+    d8: []const u8,
+    apksigner: []const u8,
+},
+/// ie. $ANDROID_HOME/cmdline_tools/bin or $ANDROID_HOME/tools/bin
+///
+/// Available to download at: https://developer.android.com/studio#command-line-tools-only
+/// The commandline tools ZIP expected looks like: commandlinetools-{OS}-11076708_latest.zip
+cmdline_tools: struct {
+    /// lint [flags] <project directory>
+    /// See documentation: https://developer.android.com/studio/write/lint#commandline
+    lint: []const u8,
+},
+/// Binaries provided by the JDK that usually exist in:
+/// - Non-Windows: $JAVA_HOME/bin
+///
+/// Windows (either of these):
+/// - C:\Program Files\Eclipse Adoptium\jdk-11.0.17.8-hotspot\
+/// - C:\Program Files\Java\jdk-17.0.4.1\
+java_tools: struct {
+    /// jar is used to zip up files in a cross-platform way that does not rely on
+    /// having "zip" in your command-line (Windows does not have this)
+    ///
+    /// ie. https://stackoverflow.com/a/18180154/5013410
+    jar: []const u8,
+    javac: []const u8,
+    keytool: []const u8,
+},
+
+/// Deprecated: Use Options instead.
+pub const ToolsOptions = Options;
+
+pub const Options = struct {
+    /// ie. "35.0.0"
+    build_tools_version: []const u8,
+    /// ie. "27.0.12077973"
+    ndk_version: []const u8,
+    /// ie. .android15 = 35 (android 15 uses API version 35)
+    api_level: APILevel,
+};
+
+pub fn create(b: *std.Build, options: Options) *Tools {
+    const host_os_tag = b.graph.host.result.os.tag;
+    const host_os_and_arch: [:0]const u8 = switch (host_os_tag) {
+        .windows => "windows-x86_64",
+        .linux => "linux-x86_64",
+        .macos => "darwin-x86_64",
+        else => @panic(b.fmt("unhandled operating system: {}", .{host_os_tag})),
+    };
+
+    // Discover tool paths
+    var path_search = PathSearch.init(b.allocator, host_os_tag) catch |err| switch (err) {
+        error.OutOfMemory => @panic("OOM"),
+        error.EnvironmentVariableNotFound => @panic("unable to find PATH as an environment variable"),
+    };
+    const configured_jdk_path = getJDKPath(b.allocator) catch @panic("OOM");
+    if (configured_jdk_path.len > 0) {
+        // Set JDK path here so it will not try searching for jarsigner.exe if searching for Android SDK
+        path_search.jdk_path = configured_jdk_path;
+    }
+    const configured_android_sdk_path = getAndroidSDKPath(b.allocator) catch @panic("OOM");
+    if (configured_android_sdk_path.len > 0) {
+        // Set android SDK path here so it will not try searching for adb.exe if searching for JDK
+        path_search.android_sdk_path = configured_android_sdk_path;
+    }
+    const android_sdk_path = path_search.findAndroidSDK(b.allocator) catch @panic("OOM");
+    const jdk_path = path_search.findJDK(b.allocator) catch @panic("OOM");
+
+    // Get build tools path
+    // ie. $ANDROID_HOME/build-tools/35.0.0
+    const build_tools_path = b.pathResolve(&[_][]const u8{ android_sdk_path, "build-tools", options.build_tools_version });
+
+    // Get NDK path
+    // ie. $ANDROID_HOME/ndk/27.0.12077973
+    const android_ndk_path = b.fmt("{s}/ndk/{s}", .{ android_sdk_path, options.ndk_version });
+
+    // Get NDK sysroot path
+    // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot
+    const android_ndk_sysroot = b.fmt("{s}/ndk/{s}/toolchains/llvm/prebuilt/{s}/sysroot", .{
+        android_sdk_path,
+        options.ndk_version,
+        host_os_and_arch,
+    });
+
+    // Get root jar path
+    const root_jar = b.pathResolve(&[_][]const u8{
+        android_sdk_path,
+        "platforms",
+        b.fmt("android-{d}", .{@intFromEnum(options.api_level)}),
+        "android.jar",
+    });
+
+    // Validate
+    var errors = std.ArrayList([]const u8).init(b.allocator);
+    defer errors.deinit();
+
+    // Get commandline tools path
+    // - 1st: $ANDROID_HOME/cmdline-tools/bin
+    // - 2nd: $ANDROID_HOME/tools/bin
+    const cmdline_tools_path = cmdlineblk: {
+        const cmdline_tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "latest", "bin" });
+        std.fs.accessAbsolute(cmdline_tools, .{}) catch |cmderr| switch (cmderr) {
+            error.FileNotFound => {
+                const tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "tools", "bin" });
+                // Check if Commandline tools path is accessible
+                std.fs.accessAbsolute(tools, .{}) catch |toolerr| switch (toolerr) {
+                    error.FileNotFound => {
+                        const message = b.fmt("Android Command Line Tools not found. Expected at: {s} or {s}", .{
+                            cmdline_tools,
+                            tools,
+                        });
+                        errors.append(message) catch @panic("OOM");
+                    },
+                    else => {
+                        const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
+                            @errorName(toolerr),
+                            tools,
+                        });
+                        errors.append(message) catch @panic("OOM");
+                    },
+                };
+            },
+            else => {
+                const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
+                    @errorName(cmderr),
+                    cmdline_tools,
+                });
+                errors.append(message) catch @panic("OOM");
+            },
+        };
+        break :cmdlineblk cmdline_tools;
+    };
+
+    if (jdk_path.len == 0) {
+        errors.append(
+            \\JDK not found.
+            \\- Download it from https://www.oracle.com/th/java/technologies/downloads/
+            \\- Then configure your JDK_HOME environment variable to where you've installed it.
+        ) catch @panic("OOM");
+    }
+    if (android_sdk_path.len == 0) {
+        errors.append(
+            \\Android SDK not found.
+            \\- Download it from https://developer.android.com/studio
+            \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
+        ) catch @panic("OOM");
+    } else {
+        // Check if build tools path is accessible
+        // ie. $ANDROID_HOME/build-tools/35.0.0
+        std.fs.accessAbsolute(build_tools_path, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                const message = b.fmt("Android Build Tool version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
+                    options.build_tools_version,
+                });
+                errors.append(message) catch @panic("OOM");
+            },
+            else => {
+                const message = b.fmt("Android Build Tool version '{s}' had unexpected error: {s}", .{
+                    options.build_tools_version,
+                    @errorName(err),
+                });
+                errors.append(message) catch @panic("OOM");
+            },
+        };
+
+        // Check if NDK path is accessible
+        // ie. $ANDROID_HOME/ndk/27.0.12077973
+        const has_ndk: bool = blk: {
+            std.fs.accessAbsolute(android_ndk_path, .{}) catch |err| switch (err) {
+                error.FileNotFound => {
+                    const message = b.fmt("Android NDK version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
+                        options.ndk_version,
+                    });
+                    errors.append(message) catch @panic("OOM");
+                    break :blk false;
+                },
+                else => {
+                    const message = b.fmt("Android NDK version '{s}' had unexpected error: {s} ({s})", .{
+                        options.ndk_version,
+                        @errorName(err),
+                        android_ndk_path,
+                    });
+                    errors.append(message) catch @panic("OOM");
+                    break :blk false;
+                },
+            };
+            break :blk true;
+        };
+
+        // Check if NDK API level is accessible
+        if (has_ndk) {
+            // Check if NDK sysroot path is accessible
+            const has_ndk_sysroot = blk: {
+                std.fs.accessAbsolute(android_ndk_sysroot, .{}) catch |err| switch (err) {
+                    error.FileNotFound => {
+                        const message = b.fmt("Android NDK sysroot '{s}' had unexpected error. Missing at '{s}'", .{
+                            options.ndk_version,
+                            android_ndk_sysroot,
+                        });
+                        errors.append(message) catch @panic("OOM");
+                        break :blk false;
+                    },
+                    else => {
+                        const message = b.fmt("Android NDK sysroot '{s}' had unexpected error: {s}, at: '{s}'", .{
+                            options.ndk_version,
+                            @errorName(err),
+                            android_ndk_sysroot,
+                        });
+                        errors.append(message) catch @panic("OOM");
+                        break :blk false;
+                    },
+                };
+                break :blk true;
+            };
+
+            // Check if NDK sysroot/usr/lib/{target}/{api_level} path is accessible
+            if (has_ndk_sysroot) {
+                _ = blk: {
+                    // "x86" has existed since Android 4.1 (API version 16)
+                    const x86_system_target = "i686-linux-android";
+                    const ndk_sysroot_target_api_version = b.fmt("{s}/usr/lib/{s}/{d}", .{ android_ndk_sysroot, x86_system_target, options.api_level });
+                    std.fs.accessAbsolute(android_ndk_sysroot, .{}) catch |err| switch (err) {
+                        error.FileNotFound => {
+                            const message = b.fmt("Android NDK version '{s}' does not support API Level {d}. No folder at '{s}'", .{
+                                options.ndk_version,
+                                @intFromEnum(options.api_level),
+                                ndk_sysroot_target_api_version,
+                            });
+                            errors.append(message) catch @panic("OOM");
+                            break :blk false;
+                        },
+                        else => {
+                            const message = b.fmt("Android NDK version '{s}' API Level {d} had unexpected error: {s}, at: '{s}'", .{
+                                options.ndk_version,
+                                @intFromEnum(options.api_level),
+                                @errorName(err),
+                                ndk_sysroot_target_api_version,
+                            });
+                            errors.append(message) catch @panic("OOM");
+                            break :blk false;
+                        },
+                    };
+                    break :blk true;
+                };
+            }
+
+            // Check if platforms/android-{api-level}/android.jar exists
+            _ = blk: {
+                std.fs.accessAbsolute(root_jar, .{}) catch |err| switch (err) {
+                    error.FileNotFound => {
+                        const message = b.fmt("Android API level {d} not installed. Unable to find '{s}'", .{
+                            @intFromEnum(options.api_level),
+                            root_jar,
+                        });
+                        errors.append(message) catch @panic("OOM");
+                        break :blk false;
+                    },
+                    else => {
+                        const message = b.fmt("Android API level {d} had unexpected error: {s}, at: '{s}'", .{
+                            @intFromEnum(options.api_level),
+                            @errorName(err),
+                            root_jar,
+                        });
+                        errors.append(message) catch @panic("OOM");
+                        break :blk false;
+                    },
+                };
+                break :blk true;
+            };
+        }
+    }
+    if (errors.items.len > 0) {
+        printErrorsAndExit("unable to find required Android installation", errors.items);
+    }
+
+    const exe_suffix = if (host_os_tag == .windows) ".exe" else "";
+    const bat_suffix = if (host_os_tag == .windows) ".bat" else "";
+
+    const tools: *Tools = b.allocator.create(Tools) catch @panic("OOM");
+    tools.* = .{
+        .b = b,
+        .android_sdk_path = android_sdk_path,
+        .api_level = options.api_level,
+        .ndk_version = options.ndk_version,
+        .ndk_sysroot_path = android_ndk_sysroot,
+        .root_jar = root_jar,
+        .jdk_path = jdk_path,
+        .build_tools = .{
+            .aapt2 = b.pathResolve(&[_][]const u8{
+                build_tools_path, b.fmt("aapt2{s}", .{exe_suffix}),
+            }),
+            .zipalign = b.pathResolve(&[_][]const u8{
+                build_tools_path, b.fmt("zipalign{s}", .{exe_suffix}),
+            }),
+            // d8/apksigner are *.bat or shell scripts that require "java"/"java.exe" to exist in
+            // your PATH
+            .d8 = b.pathResolve(&[_][]const u8{
+                build_tools_path, b.fmt("d8{s}", .{bat_suffix}),
+            }),
+            .apksigner = b.pathResolve(&[_][]const u8{
+                build_tools_path, b.fmt("apksigner{s}", .{bat_suffix}),
+            }),
+        },
+        .cmdline_tools = .{
+            .lint = b.pathResolve(&[_][]const u8{
+                cmdline_tools_path, b.fmt("lint{s}", .{bat_suffix}),
+            }),
+            // NOTE(jae): 2024-09-28
+            // Consider adding sdkmanager.bat so you can do something like "zig build sdkmanager -- {args}"
+        },
+        .java_tools = .{
+            .jar = b.pathResolve(&[_][]const u8{
+                jdk_path, "bin", b.fmt("jar{s}", .{exe_suffix}),
+            }),
+            .javac = b.pathResolve(&[_][]const u8{
+                jdk_path, "bin", b.fmt("javac{s}", .{exe_suffix}),
+            }),
+            .keytool = b.pathResolve(&[_][]const u8{
+                jdk_path, "bin", b.fmt("keytool{s}", .{exe_suffix}),
+            }),
+        },
+    };
+    return tools;
+}
+
 pub const CreateKey = struct {
     pub const Algorithm = enum {
         rsa,
@@ -52,407 +394,66 @@ pub const CreateKey = struct {
     }
 };
 
-pub const ToolsOptions = struct {
-    /// ie. "35.0.0"
-    build_tools_version: []const u8,
-    /// ie. "27.0.12077973"
-    ndk_version: []const u8,
-    /// ie. .android15 = 35 (android 15 uses API version 35)
-    api_level: APILevel,
-};
+pub fn createKeyStore(tools: *const Tools, options: CreateKey) KeyStore {
+    const b = tools.b;
+    const keytool = b.addSystemCommand(&.{
+        // https://docs.oracle.com/en/java/javase/17/docs/specs/man/keytool.html
+        tools.java_tools.keytool,
+        "-genkey",
+        "-v",
+    });
+    keytool.setName(runNameContext("keytool"));
+    keytool.addArg("-keystore");
+    const keystore_file = keytool.addOutputFileArg("zig-generated.keystore");
+    keytool.addArgs(&.{
+        // -alias "ca"
+        "-alias",
+        options.alias,
+        // -keyalg "rsa"
+        "-keyalg",
+        options.algorithm.arg(),
+        "-keysize",
+        b.fmt("{d}", .{options.key_size_in_bits}),
+        "-validity",
+        b.fmt("{d}", .{options.validity_in_days}),
+        "-storepass",
+        options.password,
+        "-keypass",
+        options.password,
+        // -dname "CN=example.com, OU=ID, O=Example, L=Doe, S=Jane, C=GB"
+        "-dname",
+        options.distinguished_name,
+    });
+    // ignore stderr, it just gives you an output like:
+    // "Generating 4,096 bit RSA key pair and self-signed certificate (SHA384withRSA) with a validity of 10,000 days
+    // for: CN=example.com, OU=ID, O=Example, L=Doe, ST=Jane, C=GB"
+    _ = keytool.captureStdErr();
+    return .{
+        .file = keystore_file,
+        .password = options.password,
+    };
+}
 
-pub const Tools = struct {
-    b: *Build,
+// TODO: Consider making this be setup on "create" and then we just pass in the "android_libc_writefile"
+// anytime setLibCFile is called
+pub fn setLibCFile(tools: *const Tools, compile: *Step.Compile) void {
+    const b = tools.b;
 
-    /// On most platforms this will map to the $ANDROID_HOME environment variable
-    android_sdk_path: []const u8,
-    /// ie. .android15 = 35 (android 15 uses API version 35)
-    api_level: APILevel,
-    /// ie. "27.0.12077973"
-    ndk_version: []const u8,
-    /// ie. "$ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot"
-    ndk_sysroot_path: []const u8,
-    /// ie. "$ANDROID_HOME/Sdk/platforms/android-{api_level}/android.jar"
-    root_jar: []const u8,
-    // $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
-    jdk_path: []const u8,
-    /// ie. $ANDROID_HOME/build-tools/35.0.0
-    build_tools: struct {
-        aapt2: []const u8,
-        zipalign: []const u8,
-        d8: []const u8,
-        apksigner: []const u8,
-    },
-    /// ie. $ANDROID_HOME/cmdline_tools/bin or $ANDROID_HOME/tools/bin
-    ///
-    /// Available to download at: https://developer.android.com/studio#command-line-tools-only
-    /// The commandline tools ZIP expected looks like: commandlinetools-{OS}-11076708_latest.zip
-    cmdline_tools: struct {
-        /// lint [flags] <project directory>
-        /// See documentation: https://developer.android.com/studio/write/lint#commandline
-        lint: []const u8,
-    },
-    /// Binaries provided by the JDK that usually exist in:
-    /// - Non-Windows: $JAVA_HOME/bin
-    ///
-    /// Windows (either of these):
-    /// - C:\Program Files\Eclipse Adoptium\jdk-11.0.17.8-hotspot\
-    /// - C:\Program Files\Java\jdk-17.0.4.1\
-    java_tools: struct {
-        /// jar is used to zip up files in a cross-platform way that does not rely on
-        /// having "zip" in your command-line (Windows does not have this)
-        ///
-        /// ie. https://stackoverflow.com/a/18180154/5013410
-        jar: []const u8,
-        javac: []const u8,
-        keytool: []const u8,
-    },
+    const target: ResolvedTarget = compile.root_module.resolved_target orelse {
+        @panic(b.fmt("no 'target' set on Android module", .{}));
+    };
+    const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
 
-    pub fn createKeyStore(tools: *const Tools, options: CreateKey) KeyStore {
-        const b = tools.b;
-        const keytool = b.addSystemCommand(&.{
-            // https://docs.oracle.com/en/java/javase/17/docs/specs/man/keytool.html
-            tools.java_tools.keytool,
-            "-genkey",
-            "-v",
-        });
-        keytool.setName(runNameContext("keytool"));
-        keytool.addArg("-keystore");
-        const keystore_file = keytool.addOutputFileArg("zig-generated.keystore");
-        keytool.addArgs(&.{
-            // -alias "ca"
-            "-alias",
-            options.alias,
-            // -keyalg "rsa"
-            "-keyalg",
-            options.algorithm.arg(),
-            "-keysize",
-            b.fmt("{d}", .{options.key_size_in_bits}),
-            "-validity",
-            b.fmt("{d}", .{options.validity_in_days}),
-            "-storepass",
-            options.password,
-            "-keypass",
-            options.password,
-            // -dname "CN=example.com, OU=ID, O=Example, L=Doe, S=Jane, C=GB"
-            "-dname",
-            options.distinguished_name,
-        });
-        // ignore stderr, it just gives you an output like:
-        // "Generating 4,096 bit RSA key pair and self-signed certificate (SHA384withRSA) with a validity of 10,000 days
-        // for: CN=example.com, OU=ID, O=Example, L=Doe, ST=Jane, C=GB"
-        _ = keytool.captureStdErr();
-        return .{
-            .file = keystore_file,
-            .password = options.password,
-        };
-    }
-
-    // TODO: Consider making this be setup on "create" and then we just pass in the "android_libc_writefile"
-    // anytime setLibCFile is called
-    pub fn setLibCFile(tools: *const Tools, compile: *Step.Compile) void {
-        const b = tools.b;
-
-        const target: ResolvedTarget = compile.root_module.resolved_target orelse {
-            @panic(b.fmt("no 'target' set on Android module", .{}));
-        };
-        const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
-
-        const android_libc_path = createLibC(
-            b,
-            system_target,
-            tools.api_level,
-            tools.ndk_sysroot_path,
-            tools.ndk_version,
-        );
-        android_libc_path.addStepDependencies(&compile.step);
-        compile.setLibCFile(android_libc_path);
-    }
-
-    pub fn create(b: *std.Build, options: ToolsOptions) *Tools {
-        const host_os_tag = b.graph.host.result.os.tag;
-        const host_os_and_arch: [:0]const u8 = switch (host_os_tag) {
-            .windows => "windows-x86_64",
-            .linux => "linux-x86_64",
-            .macos => "darwin-x86_64",
-            else => @panic(b.fmt("unhandled operating system: {}", .{host_os_tag})),
-        };
-
-        // Discover tool paths
-        var path_search = PathSearch.init(b.allocator, host_os_tag) catch |err| switch (err) {
-            error.OutOfMemory => @panic("OOM"),
-            error.EnvironmentVariableNotFound => @panic("unable to find PATH as an environment variable"),
-        };
-        const configured_jdk_path = getJDKPath(b.allocator) catch @panic("OOM");
-        if (configured_jdk_path.len > 0) {
-            // Set JDK path here so it will not try searching for jarsigner.exe if searching for Android SDK
-            path_search.jdk_path = configured_jdk_path;
-        }
-        const configured_android_sdk_path = getAndroidSDKPath(b.allocator) catch @panic("OOM");
-        if (configured_android_sdk_path.len > 0) {
-            // Set android SDK path here so it will not try searching for adb.exe if searching for JDK
-            path_search.android_sdk_path = configured_android_sdk_path;
-        }
-        const android_sdk_path = path_search.findAndroidSDK(b.allocator) catch @panic("OOM");
-        const jdk_path = path_search.findJDK(b.allocator) catch @panic("OOM");
-
-        // Get build tools path
-        // ie. $ANDROID_HOME/build-tools/35.0.0
-        const build_tools_path = b.pathResolve(&[_][]const u8{ android_sdk_path, "build-tools", options.build_tools_version });
-
-        // Get NDK path
-        // ie. $ANDROID_HOME/ndk/27.0.12077973
-        const android_ndk_path = b.fmt("{s}/ndk/{s}", .{ android_sdk_path, options.ndk_version });
-
-        // Get NDK sysroot path
-        // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot
-        const android_ndk_sysroot = b.fmt("{s}/ndk/{s}/toolchains/llvm/prebuilt/{s}/sysroot", .{
-            android_sdk_path,
-            options.ndk_version,
-            host_os_and_arch,
-        });
-
-        // Get root jar path
-        const root_jar = b.pathResolve(&[_][]const u8{
-            android_sdk_path,
-            "platforms",
-            b.fmt("android-{d}", .{@intFromEnum(options.api_level)}),
-            "android.jar",
-        });
-
-        // Validate
-        var errors = std.ArrayList([]const u8).init(b.allocator);
-        defer errors.deinit();
-
-        // Get commandline tools path
-        // - 1st: $ANDROID_HOME/cmdline-tools/bin
-        // - 2nd: $ANDROID_HOME/tools/bin
-        const cmdline_tools_path = cmdlineblk: {
-            const cmdline_tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "latest", "bin" });
-            std.fs.accessAbsolute(cmdline_tools, .{}) catch |cmderr| switch (cmderr) {
-                error.FileNotFound => {
-                    const tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "tools", "bin" });
-                    // Check if Commandline tools path is accessible
-                    std.fs.accessAbsolute(tools, .{}) catch |toolerr| switch (toolerr) {
-                        error.FileNotFound => {
-                            const message = b.fmt("Android Command Line Tools not found. Expected at: {s} or {s}", .{
-                                cmdline_tools,
-                                tools,
-                            });
-                            errors.append(message) catch @panic("OOM");
-                        },
-                        else => {
-                            const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
-                                @errorName(toolerr),
-                                tools,
-                            });
-                            errors.append(message) catch @panic("OOM");
-                        },
-                    };
-                },
-                else => {
-                    const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
-                        @errorName(cmderr),
-                        cmdline_tools,
-                    });
-                    errors.append(message) catch @panic("OOM");
-                },
-            };
-            break :cmdlineblk cmdline_tools;
-        };
-
-        if (jdk_path.len == 0) {
-            errors.append(
-                \\JDK not found.
-                \\- Download it from https://www.oracle.com/th/java/technologies/downloads/
-                \\- Then configure your JDK_HOME environment variable to where you've installed it.
-            ) catch @panic("OOM");
-        }
-        if (android_sdk_path.len == 0) {
-            errors.append(
-                \\Android SDK not found.
-                \\- Download it from https://developer.android.com/studio
-                \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
-            ) catch @panic("OOM");
-        } else {
-            // Check if build tools path is accessible
-            // ie. $ANDROID_HOME/build-tools/35.0.0
-            std.fs.accessAbsolute(build_tools_path, .{}) catch |err| switch (err) {
-                error.FileNotFound => {
-                    const message = b.fmt("Android Build Tool version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
-                        options.build_tools_version,
-                    });
-                    errors.append(message) catch @panic("OOM");
-                },
-                else => {
-                    const message = b.fmt("Android Build Tool version '{s}' had unexpected error: {s}", .{
-                        options.build_tools_version,
-                        @errorName(err),
-                    });
-                    errors.append(message) catch @panic("OOM");
-                },
-            };
-
-            // Check if NDK path is accessible
-            // ie. $ANDROID_HOME/ndk/27.0.12077973
-            const has_ndk: bool = blk: {
-                std.fs.accessAbsolute(android_ndk_path, .{}) catch |err| switch (err) {
-                    error.FileNotFound => {
-                        const message = b.fmt("Android NDK version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
-                            options.ndk_version,
-                        });
-                        errors.append(message) catch @panic("OOM");
-                        break :blk false;
-                    },
-                    else => {
-                        const message = b.fmt("Android NDK version '{s}' had unexpected error: {s} ({s})", .{
-                            options.ndk_version,
-                            @errorName(err),
-                            android_ndk_path,
-                        });
-                        errors.append(message) catch @panic("OOM");
-                        break :blk false;
-                    },
-                };
-                break :blk true;
-            };
-
-            // Check if NDK API level is accessible
-            if (has_ndk) {
-                // Check if NDK sysroot path is accessible
-                const has_ndk_sysroot = blk: {
-                    std.fs.accessAbsolute(android_ndk_sysroot, .{}) catch |err| switch (err) {
-                        error.FileNotFound => {
-                            const message = b.fmt("Android NDK sysroot '{s}' had unexpected error. Missing at '{s}'", .{
-                                options.ndk_version,
-                                android_ndk_sysroot,
-                            });
-                            errors.append(message) catch @panic("OOM");
-                            break :blk false;
-                        },
-                        else => {
-                            const message = b.fmt("Android NDK sysroot '{s}' had unexpected error: {s}, at: '{s}'", .{
-                                options.ndk_version,
-                                @errorName(err),
-                                android_ndk_sysroot,
-                            });
-                            errors.append(message) catch @panic("OOM");
-                            break :blk false;
-                        },
-                    };
-                    break :blk true;
-                };
-
-                // Check if NDK sysroot/usr/lib/{target}/{api_level} path is accessible
-                if (has_ndk_sysroot) {
-                    _ = blk: {
-                        // "x86" has existed since Android 4.1 (API version 16)
-                        const x86_system_target = "i686-linux-android";
-                        const ndk_sysroot_target_api_version = b.fmt("{s}/usr/lib/{s}/{d}", .{ android_ndk_sysroot, x86_system_target, options.api_level });
-                        std.fs.accessAbsolute(android_ndk_sysroot, .{}) catch |err| switch (err) {
-                            error.FileNotFound => {
-                                const message = b.fmt("Android NDK version '{s}' does not support API Level {d}. No folder at '{s}'", .{
-                                    options.ndk_version,
-                                    @intFromEnum(options.api_level),
-                                    ndk_sysroot_target_api_version,
-                                });
-                                errors.append(message) catch @panic("OOM");
-                                break :blk false;
-                            },
-                            else => {
-                                const message = b.fmt("Android NDK version '{s}' API Level {d} had unexpected error: {s}, at: '{s}'", .{
-                                    options.ndk_version,
-                                    @intFromEnum(options.api_level),
-                                    @errorName(err),
-                                    ndk_sysroot_target_api_version,
-                                });
-                                errors.append(message) catch @panic("OOM");
-                                break :blk false;
-                            },
-                        };
-                        break :blk true;
-                    };
-                }
-
-                // Check if platforms/android-{api-level}/android.jar exists
-                _ = blk: {
-                    std.fs.accessAbsolute(root_jar, .{}) catch |err| switch (err) {
-                        error.FileNotFound => {
-                            const message = b.fmt("Android API level {d} not installed. Unable to find '{s}'", .{
-                                @intFromEnum(options.api_level),
-                                root_jar,
-                            });
-                            errors.append(message) catch @panic("OOM");
-                            break :blk false;
-                        },
-                        else => {
-                            const message = b.fmt("Android API level {d} had unexpected error: {s}, at: '{s}'", .{
-                                @intFromEnum(options.api_level),
-                                @errorName(err),
-                                root_jar,
-                            });
-                            errors.append(message) catch @panic("OOM");
-                            break :blk false;
-                        },
-                    };
-                    break :blk true;
-                };
-            }
-        }
-        if (errors.items.len > 0) {
-            printErrorsAndExit("unable to find required Android installation", errors.items);
-        }
-
-        const exe_suffix = if (host_os_tag == .windows) ".exe" else "";
-        const bat_suffix = if (host_os_tag == .windows) ".bat" else "";
-
-        const tools: *Tools = b.allocator.create(Tools) catch @panic("OOM");
-        tools.* = .{
-            .b = b,
-            .android_sdk_path = android_sdk_path,
-            .api_level = options.api_level,
-            .ndk_version = options.ndk_version,
-            .ndk_sysroot_path = android_ndk_sysroot,
-            .root_jar = root_jar,
-            .jdk_path = jdk_path,
-            .build_tools = .{
-                .aapt2 = b.pathResolve(&[_][]const u8{
-                    build_tools_path, b.fmt("aapt2{s}", .{exe_suffix}),
-                }),
-                .zipalign = b.pathResolve(&[_][]const u8{
-                    build_tools_path, b.fmt("zipalign{s}", .{exe_suffix}),
-                }),
-                // d8/apksigner are *.bat or shell scripts that require "java"/"java.exe" to exist in
-                // your PATH
-                .d8 = b.pathResolve(&[_][]const u8{
-                    build_tools_path, b.fmt("d8{s}", .{bat_suffix}),
-                }),
-                .apksigner = b.pathResolve(&[_][]const u8{
-                    build_tools_path, b.fmt("apksigner{s}", .{bat_suffix}),
-                }),
-            },
-            .cmdline_tools = .{
-                .lint = b.pathResolve(&[_][]const u8{
-                    cmdline_tools_path, b.fmt("lint{s}", .{bat_suffix}),
-                }),
-                // NOTE(jae): 2024-09-28
-                // Consider adding sdkmanager.bat so you can do something like "zig build sdkmanager -- {args}"
-            },
-            .java_tools = .{
-                .jar = b.pathResolve(&[_][]const u8{
-                    jdk_path, "bin", b.fmt("jar{s}", .{exe_suffix}),
-                }),
-                .javac = b.pathResolve(&[_][]const u8{
-                    jdk_path, "bin", b.fmt("javac{s}", .{exe_suffix}),
-                }),
-                .keytool = b.pathResolve(&[_][]const u8{
-                    jdk_path, "bin", b.fmt("keytool{s}", .{exe_suffix}),
-                }),
-            },
-        };
-        return tools;
-    }
-};
+    const android_libc_path = createLibC(
+        b,
+        system_target,
+        tools.api_level,
+        tools.ndk_sysroot_path,
+        tools.ndk_version,
+    );
+    android_libc_path.addStepDependencies(&compile.step);
+    compile.setLibCFile(android_libc_path);
+}
 
 fn createLibC(b: *std.Build, system_target: []const u8, android_version: APILevel, ndk_sysroot_path: []const u8, ndk_version: []const u8) LazyPath {
     const libc_file_format =
@@ -715,3 +716,5 @@ const PathSearch = struct {
         }
     }
 };
+
+const Tools = @This();
