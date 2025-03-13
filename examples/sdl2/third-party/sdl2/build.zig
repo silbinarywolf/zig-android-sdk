@@ -169,15 +169,24 @@ pub fn build(b: *std.Build) !void {
     // lib.installHeadersDirectory("include", "SDL");
     b.installArtifact(lib);
 
-    var module = b.addModule("sdl", .{
+    var sdl_c_module = b.addTranslateC(.{
+        // NOTE(jae): 2025-03-13
+        // Using host target platform to avoid include errors when targetting Android
+        // Otherwise we get errors like: 'sys/types.h' file not found
         .target = b.graph.host,
         .optimize = .ReleaseFast,
-        .root_source_file = b.path("src/sdl.zig"),
+        .root_source_file = b.path("src/sdl.h"),
     });
     if (sdl_config_header) |config_header| {
-        module.addConfigHeader(config_header);
+        sdl_c_module.addConfigHeader(config_header);
     }
-    module.addIncludePath(sdl_include_path);
+    sdl_c_module.addIncludePath(sdl_include_path);
+
+    _ = b.addModule("sdl", .{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = sdl_c_module.getOutput(),
+    });
 }
 
 const generic_src_files = [_][]const u8{
