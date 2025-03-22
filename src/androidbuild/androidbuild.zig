@@ -5,6 +5,8 @@ const Target = std.Target;
 const ResolvedTarget = std.Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
 
+const log = std.log.scoped(.@"zig-android-sdk");
+
 /// API Level is an enum the maps the Android OS version to the API level
 ///
 /// https://en.wikipedia.org/wiki/Android_version_history
@@ -35,6 +37,8 @@ pub const APILevel = enum(u32) {
     android14 = 34,
     /// Vanilla Ice Cream
     android15 = 35,
+    /// Baklava
+    android16 = 36,
     // allow custom overrides (incase this library is not up to date with the latest android version)
     _,
 };
@@ -96,8 +100,6 @@ fn getAllAndroidTargets(b: *std.Build) []ResolvedTarget {
 pub fn runNameContext(comptime name: []const u8) []const u8 {
     return "zig-android-sdk " ++ name;
 }
-
-const log = std.log.scoped(.@"zig-android-sdk");
 
 pub fn printErrorsAndExit(message: []const u8, errors: []const []const u8) noreturn {
     nosuspend {
