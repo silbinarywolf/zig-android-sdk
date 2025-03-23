@@ -362,6 +362,10 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // - classes.dex
     const apk_files = b.addWriteFiles();
 
+    // These files belong in root and *must not* be compressed
+    // - resources.arsc
+    const apk_files_not_compressed = b.addWriteFiles();
+
     // Add build artifacts, usually a shared library targetting:
     // - aarch64-linux-android
     // - arm-linux-androideabi
@@ -491,10 +495,24 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         const extracted_apk_dir = resources_apk.dirname();
         jar.setCwd(extracted_apk_dir);
         _ = apk_files.addCopyDirectory(extracted_apk_dir, "", .{
-            // Ignore the *.apk that exists in this directory
-            .exclude_extensions = &.{".apk"},
+            .exclude_extensions = &.{
+                // ignore the *.apk that exists in this directory
+                ".apk",
+                // ignore resources.arsc as Android 30+ APIs does not supporting
+                // compressing this in the zip file
+                ".arsc",
+            },
         });
         apk_files.step.dependOn(&jar.step);
+
+        // Setup directory of additional files that should not be compressed
+
+        // NOTE(jae): 2025-03-23 - https://github.com/silbinarywolf/zig-android-sdk/issues/23
+        // We apply resources.arsc seperately to the zip file to avoid compressing it, otherwise we get the following
+        // error when we "adb install"
+        // - "Targeting R+ (version 30 and above) requires the resources.arsc of installed APKs to be stored uncompressed and aligned on a 4-byte boundary"
+        _ = apk_files_not_compressed.addCopyFile(extracted_apk_dir.path(b, "resources.arsc"), "resources.arsc");
+        apk_files_not_compressed.step.dependOn(&jar.step);
     }
 
     // Create zip via "jar" as it's cross-platform and aapt2 can't zip *.so or *.dex files.
@@ -513,15 +531,44 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // Hack to ensure this side-effect re-triggers zipping this up
         jar.addFileInput(directory_to_zip.path(b, "AndroidManifest.xml"));
 
-        // -c = compress
-        // -f specify filename
-        // -M do not include a MANIFEST file
+        // Written as-is from running "jar --help"
+        // -c, --create      = Create the archive. When the archive file name specified
+        // -u, --update      = Update an existing jar archive
+        // -f, --file=FILE   = The archive file name. When omitted, either stdin or
+        // -M, --no-manifest = Do not create a manifest file for the entries
+        // -0, --no-compress = Store only; use no ZIP compression
         const compress_zip_arg = "-cfM";
         if (b.verbose) jar.addArg(compress_zip_arg ++ "v") else jar.addArg(compress_zip_arg);
         const output_zip_file = jar.addOutputFileArg("compiled_code.zip");
         jar.addArg(".");
 
         break :blk output_zip_file;
+    };
+
+    // Update zip with files that are not compressed (ie. resources.arsc)
+    const update_zip: *Step = blk: {
+        const jar = b.addSystemCommand(&[_][]const u8{
+            apk.tools.java_tools.jar,
+        });
+        jar.setName(runNameContext("jar (update zip with uncompressed files)"));
+
+        const directory_to_zip = apk_files_not_compressed.getDirectory();
+        jar.setCwd(directory_to_zip);
+        // NOTE(jae): 2025-03-23
+        // Hack to ensure this side-effect re-triggers zipping this up
+        jar.addFileInput(apk_files_not_compressed.getDirectory().path(b, "resources.arsc"));
+
+        // Written as-is from running "jar --help"
+        // -c, --create      = Create the archive. When the archive file name specified
+        // -u, --update      = Update an existing jar archive
+        // -f, --file=FILE   = The archive file name. When omitted, either stdin or
+        // -M, --no-manifest = Do not create a manifest file for the entries
+        // -0, --no-compress = Store only; use no ZIP compression
+        const update_zip_arg = "-ufM0";
+        if (b.verbose) jar.addArg(update_zip_arg ++ "v") else jar.addArg(update_zip_arg);
+        jar.addFileArg(zip_file);
+        jar.addArg(".");
+        break :blk &jar.step;
     };
 
     // NOTE(jae): 2024-09-28 - https://github.com/silbinarywolf/zig-android-sdk/issues/8
@@ -561,7 +608,10 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             "4",
         });
 
+        // Depend on zip file and the additional update to it
         zipalign.addFileArg(zip_file);
+        zipalign.step.dependOn(update_zip);
+
         const apk_file = zipalign.addOutputFileArg(b.fmt("aligned-{s}.apk", .{apk_name}));
         break :blk apk_file;
     };
