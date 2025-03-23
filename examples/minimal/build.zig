@@ -37,16 +37,19 @@ pub fn build(b: *std.Build) void {
     };
 
     for (targets) |target| {
-        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addSharedLibrary(.{
-            .name = exe_name,
-            .root_source_file = b.path("src/minimal.zig"),
+        const app_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .root_source_file = b.path("src/minimal.zig"),
+        });
+
+        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
+            .name = exe_name,
+            .root_module = app_module,
+            .linkage = .dynamic,
         }) else b.addExecutable(.{
             .name = exe_name,
-            .root_source_file = b.path("src/minimal.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = app_module,
         });
 
         // if building as library for Android, add this target

@@ -56,16 +56,18 @@ pub fn build(b: *std.Build) void {
 
     for (targets) |target| {
         const exe_name: []const u8 = "sdl-zig-demo";
-        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addSharedLibrary(.{
-            .name = exe_name,
-            .root_source_file = b.path("src/sdl-zig-demo.zig"),
+        const app_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
+            .root_source_file = b.path("src/sdl-zig-demo.zig"),
+        });
+        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
+            .name = exe_name,
+            .root_module = app_module,
+            .linkage = .dynamic,
         }) else b.addExecutable(.{
             .name = exe_name,
-            .root_source_file = b.path("src/sdl-zig-demo.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = app_module,
         });
 
         const library_optimize = if (!target.result.abi.isAndroid())
