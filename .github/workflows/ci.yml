@@ -81,7 +81,7 @@ jobs:
         api-level: 34
         arch: x86_64
         profile: Nexus 6
-        script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -n com.zig.sdl2/android.app.NativeActivity
+        script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -n com.zig.sdl2/ZigSDLActivity
         working-directory: examples/sdl2
 
     #
