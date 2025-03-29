@@ -82,7 +82,7 @@ jobs:
         arch: x86_64
         profile: Nexus 6
         script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -n com.zig.sdl2/android.app.NativeActivity
-        working-directory: examples/sdl-zig-demo
+        working-directory: examples/sdl2
 
     #
     # Nightly Zig Builds
