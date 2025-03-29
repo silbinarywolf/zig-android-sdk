@@ -37,6 +37,10 @@ jobs:
       with:
         packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456'
 
+    #
+    # Stable Zig Builds
+    #
+
     - name: Setup Zig Stable (0.14.0)
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
@@ -52,6 +56,27 @@ jobs:
     - name: Build SDL2 Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
+
+    - name: Enable KVM (For Android emulation)
+      if: startsWith(matrix.os, 'ubuntu-')
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+
+    - name: Run Minimal Example (Android Emulator)
+      uses: reactivecircus/android-emulator-runner@v2
+      if: startsWith(matrix.os, 'ubuntu-')
+      working-directory: examples/minimal
+      with:
+        api-level: 34
+        system-image-api-level: 34-ext9
+        target: android-automotive
+        script: adb shell am start -n com.zig.minimal/android.app.NativeActivity
+
+    #
+    # Nightly Zig Builds
+    #
 
     - name: Setup Zig Nightly
       uses: mlugg/setup-zig@v1
