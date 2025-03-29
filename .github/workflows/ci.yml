@@ -74,6 +74,16 @@ jobs:
         script: adb install ./zig-out/bin/minimal.apk && adb shell am start -n com.zig.minimal/android.app.NativeActivity
         working-directory: examples/minimal
 
+    - name: Run SDL2 Example (Android Emulator)
+      if: startsWith(matrix.os, 'ubuntu-')
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        arch: x86_64
+        profile: Nexus 6
+        script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -n com.zig.sdl2/android.app.NativeActivity
+        working-directory: examples/sdl-zig-demo
+
     #
     # Nightly Zig Builds
     #
