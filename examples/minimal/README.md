@@ -2,11 +2,12 @@
 
 As of 2024-09-19, this is a thrown together, very quick copy-paste of the minimal example from the original [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate/blob/master/examples/minimal/main.zig) repository.
 
-### Build and install to test one target against a local emulator
+### Build, install to test one target against a local emulator and run
 
 ```sh
 zig build -Dtarget=x86_64-linux-android
 adb install ./zig-out/bin/minimal.apk
+adb shell am start -S -n com.zig.minimal/android.app.NativeActivity
 ```
 
 ### Build and install for all supported Android targets
