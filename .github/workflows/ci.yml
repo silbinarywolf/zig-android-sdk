@@ -71,7 +71,7 @@ jobs:
         api-level: 34
         arch: x86_64
         profile: Nexus 6
-        script: adb install ./zig-out/bin/minimal.apk && adb shell am start -n com.zig.minimal/android.app.NativeActivity
+        script: adb install ./zig-out/bin/minimal.apk && adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
         working-directory: examples/minimal
 
     - name: Run SDL2 Example (Android Emulator)
@@ -81,7 +81,7 @@ jobs:
         api-level: 34
         arch: x86_64
         profile: Nexus 6
-        script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -n com.zig.sdl2/ZigSDLActivity
+        script:  adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
         working-directory: examples/sdl2
 
     #

@@ -7,7 +7,7 @@ As of 2024-09-19, this is a thrown together, very quick copy-paste of the minima
 ```sh
 zig build -Dtarget=x86_64-linux-android
 adb install ./zig-out/bin/minimal.apk
-adb shell am start -S -n com.zig.minimal/android.app.NativeActivity
+adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
 ```
 
 ### Build and install for all supported Android targets
