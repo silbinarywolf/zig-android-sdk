@@ -69,8 +69,8 @@ jobs:
       uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: 34
-        system-image-api-level: 34-ext9
-        target: android-automotive
+        arch: x86_64
+        profile: Nexus 6
         script: adb install ./zig-out/bin/minimal.apk && adb shell am start -n com.zig.minimal/android.app.NativeActivity
         working-directory: examples/minimal
 
