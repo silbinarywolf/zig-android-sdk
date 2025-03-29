@@ -28,6 +28,8 @@ api_level: APILevel,
 ndk_version: []const u8,
 /// ie. "$ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot"
 ndk_sysroot_path: []const u8,
+/// ie. "$ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot/usr/include"
+include_path: []const u8,
 /// ie. "$ANDROID_HOME/Sdk/platforms/android-{api_level}/android.jar"
 root_jar: []const u8,
 // $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
@@ -320,6 +322,7 @@ pub fn create(b: *std.Build, options: Options) *Tools {
         .api_level = options.api_level,
         .ndk_version = options.ndk_version,
         .ndk_sysroot_path = android_ndk_sysroot,
+        .include_path = b.fmt("{s}/usr/include", .{tools.ndk_sysroot_path}),
         .root_jar = root_jar,
         .jdk_path = jdk_path,
         .build_tools = .{
@@ -439,9 +442,7 @@ pub fn createKeyStore(tools: *const Tools, options: CreateKey) KeyStore {
 pub fn setLibCFile(tools: *const Tools, compile: *Step.Compile) void {
     const b = tools.b;
 
-    const target: ResolvedTarget = compile.root_module.resolved_target orelse {
-        @panic(b.fmt("no 'target' set on Android module", .{}));
-    };
+    const target: ResolvedTarget = compile.root_module.resolved_target orelse @panic("no 'target' set on Android module");
     const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
 
     const android_libc_path = createLibC(
@@ -453,6 +454,12 @@ pub fn setLibCFile(tools: *const Tools, compile: *Step.Compile) void {
     );
     android_libc_path.addStepDependencies(&compile.step);
     compile.setLibCFile(android_libc_path);
+}
+
+pub fn getSystemIncludePath(tools: *const Tools, target: ResolvedTarget) []const u8 {
+    const b = tools.b;
+    const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
+    return b.fmt("{s}/{s}", .{ tools.include_path, system_target });
 }
 
 fn createLibC(b: *std.Build, system_target: []const u8, android_version: APILevel, ndk_sysroot_path: []const u8, ndk_version: []const u8) LazyPath {
