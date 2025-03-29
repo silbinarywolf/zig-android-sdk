@@ -65,14 +65,14 @@ jobs:
         sudo udevadm trigger --name-match=kvm
 
     - name: Run Minimal Example (Android Emulator)
-      uses: reactivecircus/android-emulator-runner@v2
       if: startsWith(matrix.os, 'ubuntu-')
-      working-directory: examples/minimal
+      uses: reactivecircus/android-emulator-runner@v2
       with:
         api-level: 34
         system-image-api-level: 34-ext9
         target: android-automotive
         script: adb shell am start -n com.zig.minimal/android.app.NativeActivity
+        working-directory: examples/minimal
 
     #
     # Nightly Zig Builds
