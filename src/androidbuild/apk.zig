@@ -412,6 +412,29 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             }
         }
 
+        // Find TranslateC dependencies and add system path
+        var iter = artifact.root_module.import_table.iterator();
+        while (iter.next()) |it| {
+            const module = it.value_ptr.*;
+            const root_source_file = module.root_source_file orelse continue;
+            switch (root_source_file) {
+                .generated => |gen| {
+                    const step = gen.file.step;
+                    if (step.id != .translate_c) {
+                        continue;
+                    }
+                    const c_translate_target = module.resolved_target orelse continue;
+                    if (!c_translate_target.result.abi.isAndroid()) {
+                        continue;
+                    }
+                    const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
+                    translate_c.addIncludePath(.{ .cwd_relative = apk.tools.include_path });
+                    translate_c.addSystemIncludePath(.{ .cwd_relative = apk.tools.getSystemIncludePath(c_translate_target) });
+                },
+                else => continue,
+            }
+        }
+
         // update linked libraries that use C or C++ to:
         // - use Android LibC file
         // - add Android NDK library paths. (libandroid, liblog, etc)

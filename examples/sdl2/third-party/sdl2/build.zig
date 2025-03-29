@@ -170,10 +170,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     var sdl_c_module = b.addTranslateC(.{
-        // NOTE(jae): 2025-03-13
-        // Using host target platform to avoid include errors when targetting Android
-        // Otherwise we get errors like: 'sys/types.h' file not found
-        .target = b.graph.host,
+        .target = target,
         .optimize = .ReleaseFast,
         .root_source_file = b.path("src/sdl.h"),
     });
