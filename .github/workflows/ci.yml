@@ -54,47 +54,42 @@ jobs:
       working-directory: examples/minimal
 
     - name: Build SDL2 Example (Zig Stable)
-      run: zig build -Dandroid=true --verbose
+      run: |
+        zig build -Dandroid=true --verbose
+        zig build -Dandroid=true -Dcrash-on-exception --verbose
       working-directory: examples/sdl2
 
-    # NOTE(jae): 2025-03-30
-    # Attempted to run examples on Ubuntu OS but even though the SDL2 example
-    # gets obvious errors with a dialog box popping up, I can't easily detect if a failure occurred.
-    #
-    # If I hacked the onCreate of SDLActivity and just made it throw an exception instead of having a dialog box
-    # that would probably catch instantiation issues but not sure it's worth doing.
+    - name: Enable KVM (For Android emulation)
+      if: startsWith(matrix.os, 'ubuntu-')
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
 
-    # - name: Enable KVM (For Android emulation)
-    #   if: startsWith(matrix.os, 'ubuntu-')
-    #   run: |
-    #     echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-    #     sudo udevadm control --reload-rules
-    #     sudo udevadm trigger --name-match=kvm
+    - name: Run Minimal Example (Android Emulator)
+      if: startsWith(matrix.os, 'ubuntu-')
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        arch: x86_64
+        profile: Nexus 6
+        script: |
+          adb install ./zig-out/bin/minimal.apk
+          adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
+        working-directory: examples/minimal
 
-    # - name: Run Minimal Example (Android Emulator)
-    #   if: startsWith(matrix.os, 'ubuntu-')
-    #   uses: reactivecircus/android-emulator-runner@v2
-    #   with:
-    #     api-level: 34
-    #     arch: x86_64
-    #     profile: Nexus 6
-    #     script: |
-    #       adb install ./zig-out/bin/minimal.apk
-    #       adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
-    #     working-directory: examples/minimal
-
-    # - name: Run SDL2 Example (Android Emulator)
-    #   if: startsWith(matrix.os, 'ubuntu-')
-    #   uses: reactivecircus/android-emulator-runner@v2
-    #   with:
-    #     api-level: 34
-    #     arch: x86_64
-    #     profile: Nexus 6
-    #     #script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
-    #     script: |
-    #       adb install ./zig-out/bin/sdl-zig-demo.apk
-    #       adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 -v 50
-    #     working-directory: examples/sdl2
+    - name: Run SDL2 Example (Android Emulator)
+      if: startsWith(matrix.os, 'ubuntu-')
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        arch: x86_64
+        profile: Nexus 6
+        #script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
+        script: |
+          adb install ./zig-out/bin/sdl-zig-demo.apk
+          adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 -v 50
+        working-directory: examples/sdl2
 
     #
     # Nightly Zig Builds
