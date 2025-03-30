@@ -45,6 +45,11 @@ pub fn build(b: *std.Build) void {
         if (!crash_on_exception) {
             apk.addJavaSourceFile(.{ .file = b.path("android/src/ZigSDLActivity.java") });
         } else {
+            // This is used for testing in Github Actions, so that we can call "adb shell monkey" and trigger
+            // an error.
+            // - adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 -v 50
+            //
+            // This alternate SDLActivity skips the nice dialog box you get when doing manual human testing.
             apk.addJavaSourceFile(.{ .file = b.path("android/androidCrashTest/ZigSDLActivity.java") });
         }
 

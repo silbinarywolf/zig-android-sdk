@@ -59,37 +59,40 @@ jobs:
         zig build -Dandroid=true -Dcrash-on-exception --verbose
       working-directory: examples/sdl2
 
-    - name: Enable KVM (For Android emulation)
-      if: startsWith(matrix.os, 'ubuntu-')
-      run: |
-        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-        sudo udevadm control --reload-rules
-        sudo udevadm trigger --name-match=kvm
+    # TODO(jae): 2025-03-30
+    # Need to figure out how to get 'adb shell monkey' to return an error code or be able to return an error code
+    # if the stdout of the command has 'Monkey aborted due to error.'
 
-    - name: Run Minimal Example (Android Emulator)
-      if: startsWith(matrix.os, 'ubuntu-')
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: 34
-        arch: x86_64
-        profile: Nexus 6
-        script: |
-          adb install ./zig-out/bin/minimal.apk
-          adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
-        working-directory: examples/minimal
+    # - name: Enable KVM (For Android emulation)
+    #   if: startsWith(matrix.os, 'ubuntu-')
+    #   run: |
+    #     echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+    #     sudo udevadm control --reload-rules
+    #     sudo udevadm trigger --name-match=kvm
 
-    - name: Run SDL2 Example (Android Emulator)
-      if: startsWith(matrix.os, 'ubuntu-')
-      uses: reactivecircus/android-emulator-runner@v2
-      with:
-        api-level: 34
-        arch: x86_64
-        profile: Nexus 6
-        #script: adb install ./zig-out/bin/sdl-zig-demo.apk && adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
-        script: |
-          adb install ./zig-out/bin/sdl-zig-demo.apk
-          adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 --throttle 1000 -v 2
-        working-directory: examples/sdl2
+    # - name: Run Minimal Example (Android Emulator)
+    #   if: startsWith(matrix.os, 'ubuntu-')
+    #   uses: reactivecircus/android-emulator-runner@v2
+    #   with:
+    #     api-level: 34
+    #     arch: x86_64
+    #     profile: Nexus 6
+    #     script: |
+    #       adb install ./zig-out/bin/minimal.apk
+    #       adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
+    #     working-directory: examples/minimal
+
+    # - name: Run SDL2 Example (Android Emulator)
+    #   if: startsWith(matrix.os, 'ubuntu-')
+    #   uses: reactivecircus/android-emulator-runner@v2
+    #   with:
+    #     api-level: 34
+    #     arch: x86_64
+    #     profile: Nexus 6
+    #     script: |
+    #       adb install ./zig-out/bin/sdl-zig-demo.apk
+    #       adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 --throttle 1000 -v 2
+    #     working-directory: examples/sdl2
 
     #
     # Nightly Zig Builds
