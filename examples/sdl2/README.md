@@ -2,11 +2,12 @@
 
 This is a copy-paste of [Andrew Kelly's SDL Zig Demo](https://github.com/andrewrk/sdl-zig-demo) but running on Android. The build is setup so you can also target your native operating system as well.
 
-### Build and install to test one target against a local emulator
+### Build, install to test one target against a local emulator and run
 
 ```sh
 zig build -Dtarget=x86_64-linux-android
 adb install ./zig-out/bin/sdl-zig-demo.apk
+adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
 ```
 
 ### Build and install for all supported Android targets

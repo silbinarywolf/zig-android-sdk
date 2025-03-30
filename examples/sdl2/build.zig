@@ -7,6 +7,8 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
     const android_targets = android.standardTargets(b, root_target);
 
+    const crash_on_exception = b.option(bool, "crash-on-exception", "if true then we'll use the activity from androidCrashTest folder") orelse false;
+
     var root_target_single = [_]std.Build.ResolvedTarget{root_target};
     const targets: []std.Build.ResolvedTarget = if (android_targets.len == 0)
         root_target_single[0..]
@@ -40,7 +42,16 @@ pub fn build(b: *std.Build) void {
         apk.addResourceDirectory(b.path("android/res"));
 
         // Add Java files
-        apk.addJavaSourceFile(.{ .file = b.path("android/src/ZigSDLActivity.java") });
+        if (!crash_on_exception) {
+            apk.addJavaSourceFile(.{ .file = b.path("android/src/ZigSDLActivity.java") });
+        } else {
+            // This is used for testing in Github Actions, so that we can call "adb shell monkey" and trigger
+            // an error.
+            // - adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 -v 50
+            //
+            // This alternate SDLActivity skips the nice dialog box you get when doing manual human testing.
+            apk.addJavaSourceFile(.{ .file = b.path("android/androidCrashTest/ZigSDLActivity.java") });
+        }
 
         // Add SDL2's Java files like SDL.java, SDLActivity.java, HIDDevice.java, etc
         const sdl_dep = b.dependency("sdl2", .{
