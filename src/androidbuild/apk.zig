@@ -44,9 +44,9 @@ pub fn create(b: *std.Build, tools: *const Tools) *Apk {
         .tools = tools,
         .key_store = null,
         .android_manifest = null,
-        .artifacts = .{},
-        .java_files = .{},
-        .resources = .{},
+        .artifacts = .empty,
+        .java_files = .empty,
+        .resources = .empty,
     };
     return apk;
 }
@@ -137,10 +137,10 @@ fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
     // This include is specifically needed for: #if defined(__ANDROID__) && defined(__arm__) && !defined(HAVE_GETAUXVAL)
     //
     // ie. $ANDROID_HOME/ndk/{ndk_version}/sources/android/cpufeatures
-    if (module.resolved_target) |resolved_target| {
-        if (resolved_target.result.cpu.arch == .arm) {
-            module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.tools.android_sdk_path, apk.tools.ndk_version }) });
-        }
+    if (target.result.cpu.arch == .arm) {
+        module.addIncludePath(.{
+            .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.tools.android_sdk_path, apk.tools.ndk_version }),
+        });
     }
 
     // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ usr/lib/aarch64-linux-android/35
@@ -386,21 +386,6 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         };
         _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
 
-        // update artifact to:
-        // - Be configured to work correctly on Android
-        // - To know where C header /lib files are via setLibCFile and linkLibC
-        // - Provide path to additional libraries to link to
-        {
-            if (artifact.linkage) |linkage| {
-                if (linkage == .dynamic) {
-                    updateSharedLibraryOptions(artifact);
-                }
-            }
-            apk.tools.setLibCFile(artifact);
-            apk.addLibraryPaths(artifact.root_module);
-            artifact.linkLibC();
-        }
-
         // Add module
         artifact.root_module.addImport("android_builtin", android_builtin);
 
@@ -439,6 +424,27 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // - use Android LibC file
         // - add Android NDK library paths. (libandroid, liblog, etc)
         apk.updateLinkObjects(artifact, so_dir, apk_files);
+
+        // update artifact to:
+        // - Be configured to work correctly on Android
+        // - To know where C header /lib files are via setLibCFile and linkLibC
+        // - Provide path to additional libraries to link to
+        {
+            if (artifact.linkage) |linkage| {
+                if (linkage == .dynamic) {
+                    updateSharedLibraryOptions(artifact);
+                }
+            }
+            apk.tools.setLibCFile(artifact);
+            apk.addLibraryPaths(artifact.root_module);
+            artifact.linkLibC();
+
+            // Apply workaround for Zig 0.14.0 stable
+            //
+            // This *must* occur after "apk.updateLinkObjects" for the root package otherwise
+            // you may get an error like: "unable to find dynamic system library 'c++abi_zig_workaround'"
+            apk.applyLibLinkCppWorkaroundIssue19(artifact);
+        }
     }
 
     // Add *.jar files
@@ -678,9 +684,9 @@ fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8
                         }
 
                         // If library is built using C or C++ then setLibCFile
-                        const link_libc = artifact.root_module.link_libc orelse false;
-                        const link_libcpp = artifact.root_module.link_libcpp orelse false;
-                        if (link_libc or link_libcpp) {
+                        if (artifact.root_module.link_libc == true or
+                            artifact.root_module.link_libcpp == true)
+                        {
                             apk.tools.setLibCFile(artifact);
                         }
 
@@ -689,12 +695,61 @@ fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8
 
                         // Update libraries linked to this library
                         apk.updateLinkObjects(artifact, so_dir, raw_top_level_apk_files);
+
+                        // Apply workaround for Zig 0.14.0
+                        apk.applyLibLinkCppWorkaroundIssue19(artifact);
                     },
                     else => continue,
                 }
             },
             else => {},
         }
+    }
+}
+
+/// Hack/Workaround issue #19 where Zig has issues with "linkLibCpp()" in Zig 0.14.0 stable
+/// - Zig Android SDK: https://github.com/silbinarywolf/zig-android-sdk/issues/19
+/// - Zig: https://github.com/ziglang/zig/issues/23302
+///
+/// This applies in two cases:
+/// - If the artifact has "link_libcpp = true"
+/// - If the artifact is linking to another artifact that has "link_libcpp = true", ie. artifact.dependsOnSystemLibrary("c++abi_zig_workaround")
+fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
+    const b = apk.b;
+
+    const should_apply_fix = (artifact.root_module.link_libcpp == true or
+        artifact.dependsOnSystemLibrary("c++abi_zig_workaround"));
+    if (!should_apply_fix) {
+        return;
+    }
+
+    const system_target = getAndroidTriple(artifact.root_module.resolved_target.?) catch |err| @panic(@errorName(err));
+    const lib_path: LazyPath = .{
+        .cwd_relative = b.pathJoin(&.{ apk.tools.ndk_sysroot_path, "usr", "lib", system_target, "libc++abi.a" }),
+    };
+    const libcpp_workaround = b.addWriteFiles();
+    const libcppabi_dir = libcpp_workaround.addCopyFile(lib_path, "libc++abi_zig_workaround.a").dirname();
+
+    artifact.root_module.addLibraryPath(libcppabi_dir);
+
+    if (artifact.root_module.link_libcpp == true) {
+        // NOTE(jae): 2025-04-06
+        // Don't explicitly linkLibCpp
+        artifact.root_module.link_libcpp = null;
+
+        // NOTE(jae): 2025-04-06 - https://github.com/silbinarywolf/zig-android-sdk/issues/28
+        // Resolve issue where in Zig 0.14.0 stable that '__gxx_personality_v0' is missing when starting
+        // an SDL2 or SDL3 application.
+        //
+        // Tested on x86_64 with:
+        // - build_tools_version = "35.0.1"
+        // - ndk_version = "29.0.13113456"
+        artifact.root_module.linkSystemLibrary("c++abi_zig_workaround", .{});
+
+        // NOTE(jae): 2025-04-06
+        // unresolved symbol "_Unwind_Resume" error occurs when SDL2 is loaded,
+        // so we link the "unwind" library
+        artifact.root_module.linkSystemLibrary("unwind", .{});
     }
 }
 

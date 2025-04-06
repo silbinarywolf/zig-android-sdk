@@ -4,7 +4,6 @@
 
 This library allows you to setup and build an APK for your Android devices. This project was mostly based off the work of [ikskuh](https://github.com/ikskuh) and wouldn't exist without the work they did on the [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate) project.
 
-
 ```sh
 # Target one Android architecture
 zig build -Dtarget=x86_64-linux-android
@@ -62,6 +61,10 @@ Add the following to your build.zig.zon file and run `zig build`.
 
 * [minimal](examples/minimal): This is based off ZigAndroidTemplate's minimal example.
 * [SDL2](examples/sdl2): This is based off Andrew Kelly's SDL Zig Demo but modified to run on Android, Windows, Mac and Linux.
+
+## Workarounds
+
+- Patch any artifacts that called `linkLibCpp()` to disable linking C++ and instead manually link `c++abi` and `unwind`. This at least allows the SDL2 example to work for now.
 
 ## Credits
 
