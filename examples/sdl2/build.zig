@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
         }
         const android_tools = android.Tools.create(b, .{
             .api_level = .android15,
-            .build_tools_version = "35.0.0",
+            .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
             // NOTE(jae): 2025-03-09
             // Previously this example used 'ndk' "27.0.12077973".

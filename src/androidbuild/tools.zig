@@ -133,6 +133,24 @@ pub fn create(b: *std.Build, options: Options) *Tools {
     var errors = std.ArrayList([]const u8).init(b.allocator);
     defer errors.deinit();
 
+    if (jdk_path.len == 0) {
+        errors.append(
+            \\JDK not found.
+            \\- Download it from https://www.oracle.com/th/java/technologies/downloads/
+            \\- Then configure your JDK_HOME environment variable to where you've installed it.
+        ) catch @panic("OOM");
+    }
+    if (android_sdk_path.len == 0) {
+        errors.append(
+            \\Android SDK not found.
+            \\- Download it from https://developer.android.com/studio
+            \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
+        ) catch @panic("OOM");
+    }
+    if (errors.items.len > 0) {
+        printErrorsAndExit("unable to find required Android installation", errors.items);
+    }
+
     // Get commandline tools path
     // - 1st: $ANDROID_HOME/cmdline-tools/bin
     // - 2nd: $ANDROID_HOME/tools/bin
@@ -170,20 +188,7 @@ pub fn create(b: *std.Build, options: Options) *Tools {
         break :cmdlineblk cmdline_tools;
     };
 
-    if (jdk_path.len == 0) {
-        errors.append(
-            \\JDK not found.
-            \\- Download it from https://www.oracle.com/th/java/technologies/downloads/
-            \\- Then configure your JDK_HOME environment variable to where you've installed it.
-        ) catch @panic("OOM");
-    }
-    if (android_sdk_path.len == 0) {
-        errors.append(
-            \\Android SDK not found.
-            \\- Download it from https://developer.android.com/studio
-            \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
-        ) catch @panic("OOM");
-    } else {
+    {
         // Check if build tools path is accessible
         // ie. $ANDROID_HOME/build-tools/35.0.0
         std.fs.accessAbsolute(build_tools_path, .{}) catch |err| switch (err) {
