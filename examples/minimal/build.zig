@@ -34,6 +34,10 @@ pub fn build(b: *std.Build) void {
         // Add Java files
         // - If you have 'android:hasCode="false"' in your AndroidManifest.xml then no Java files are required
         //   see: https://developer.android.com/ndk/samples/sample_na
+        //
+        //   WARNING: If you do not provide Java files AND android:hasCode="false" isn't explicitly set, then you may get the following error on "adb install"
+        //      Scanning Failed.: Package /data/app/base.apk code is missing]
+        //
         // apk.addJavaSourceFile(.{ .file = b.path("android/src/X.java") });
         break :blk apk;
     };

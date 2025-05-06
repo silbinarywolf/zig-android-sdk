@@ -207,7 +207,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // This validation rule has been removed because if you have `android:hasCode="false"` in your AndroidManifest.xml file
         // then you can have no Java files.
         //
-        // If you do not provide Java files AND hasCode=false isn't set, then you may get the following error on "adb install"
+        // If you do not provide Java files AND android:hasCode="false" isn't set, then you may get the following error on "adb install"
         // - Scanning Failed.: Package /data/app/base.apk code is missing]
         //
         // Ideally we may want to do something where we can utilize "aapt2 dump X" to determine if "hasCode" is set and if it isn't, throw
