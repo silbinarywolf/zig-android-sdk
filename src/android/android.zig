@@ -199,7 +199,12 @@ const Panic = struct {
         // }
         var act = posix.Sigaction{
             .handler = .{ .handler = posix.SIG.DFL },
-            .mask = posix.empty_sigset,
+            .mask = if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14)
+                // Legacy 0.14.0
+                posix.empty_sigset
+            else
+                // 0.15.0-dev+
+                posix.sigemptyset(),
             .flags = 0,
         };
         // To avoid a double-panic, do nothing if an error happens here.
