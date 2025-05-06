@@ -13,6 +13,9 @@ const android_builtin = struct {
     pub const package_name: [:0]const u8 = ab.package_name;
 };
 
+/// Writes the constant string text to the log, with priority prio and tag tag.
+/// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+/// Source: https://developer.android.com/ndk/reference/group/logging
 extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
