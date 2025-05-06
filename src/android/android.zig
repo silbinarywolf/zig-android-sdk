@@ -169,6 +169,7 @@ const Panic = struct {
     threadlocal var panic_stage: usize = 0;
 
     fn panic(message: []const u8, ret_addr: ?usize) noreturn {
+        @branchHint(.cold);
         if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
         const first_trace_addr = ret_addr orelse @returnAddress();
         panicImpl(first_trace_addr, message);
@@ -245,14 +246,7 @@ const Panic = struct {
     /// - Provide custom "io" namespace so we can easily customize getStdErr() to be our own writer
     /// - Provide other functions from std.debug.*
     fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
-        // NOTE(jae): 2024-09-22
-        // Cannot mark this as cold(true) OR setCold() depending on Zig version as we get an invalid builtin function
-        // comptime {
-        //     if (builtin.zig_version.minor == 13)
-        //         @setCold(true)
-        //     else
-        //         @cold(true);
-        // }
+        @branchHint(.cold);
 
         if (enable_segfault_handler) {
             // If a segfault happens while panicking, we want it to actually segfault, not trigger
