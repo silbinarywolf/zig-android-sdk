@@ -92,7 +92,7 @@ const LogWriter = struct {
     /// logs with the package name.
     ///
     /// To workaround this, we bake the package name into the Zig binaries.
-    var tag: [:0]const u8 = android_builtin.package_name;
+    const tag: [:0]const u8 = android_builtin.package_name;
 
     level: Level,
 
@@ -166,6 +166,7 @@ const Panic = struct {
     threadlocal var panic_stage: usize = 0;
 
     fn panic(message: []const u8, ret_addr: ?usize) noreturn {
+        if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
         const first_trace_addr = ret_addr orelse @returnAddress();
         panicImpl(first_trace_addr, message);
     }
