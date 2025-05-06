@@ -13,6 +13,9 @@ const android_builtin = struct {
     pub const package_name: [:0]const u8 = ab.package_name;
 };
 
+/// Writes the constant string text to the log, with priority prio and tag tag.
+/// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+/// Source: https://developer.android.com/ndk/reference/group/logging
 extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
@@ -92,7 +95,7 @@ const LogWriter = struct {
     /// logs with the package name.
     ///
     /// To workaround this, we bake the package name into the Zig binaries.
-    var tag: [:0]const u8 = android_builtin.package_name;
+    const tag: [:0]const u8 = android_builtin.package_name;
 
     level: Level,
 
@@ -166,6 +169,8 @@ const Panic = struct {
     threadlocal var panic_stage: usize = 0;
 
     fn panic(message: []const u8, ret_addr: ?usize) noreturn {
+        @branchHint(.cold);
+        if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
         const first_trace_addr = ret_addr orelse @returnAddress();
         panicImpl(first_trace_addr, message);
     }
@@ -199,7 +204,12 @@ const Panic = struct {
         // }
         var act = posix.Sigaction{
             .handler = .{ .handler = posix.SIG.DFL },
-            .mask = posix.empty_sigset,
+            .mask = if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14)
+                // Legacy 0.14.0
+                posix.empty_sigset
+            else
+                // 0.15.0-dev+
+                posix.sigemptyset(),
             .flags = 0,
         };
         // To avoid a double-panic, do nothing if an error happens here.
@@ -236,14 +246,7 @@ const Panic = struct {
     /// - Provide custom "io" namespace so we can easily customize getStdErr() to be our own writer
     /// - Provide other functions from std.debug.*
     fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
-        // NOTE(jae): 2024-09-22
-        // Cannot mark this as cold(true) OR setCold() depending on Zig version as we get an invalid builtin function
-        // comptime {
-        //     if (builtin.zig_version.minor == 13)
-        //         @setCold(true)
-        //     else
-        //         @cold(true);
-        // }
+        @branchHint(.cold);
 
         if (enable_segfault_handler) {
             // If a segfault happens while panicking, we want it to actually segfault, not trigger

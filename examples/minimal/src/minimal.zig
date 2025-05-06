@@ -72,8 +72,16 @@ fn nativeActivityOnCreate(activity: *androidbind.ANativeActivity, savedState: []
     log.debug("Successfully started the app.", .{});
 }
 
+comptime {
+    if (builtin.abi.isAndroid()) {
+        @export(&NativeActivity_onCreate, .{ .name = "ANativeActivity_onCreate" });
+    } else {
+        @compileError("This example cannot run on targets other Android");
+    }
+}
+
 /// Android entry point
-export fn ANativeActivity_onCreate(activity: *androidbind.ANativeActivity, rawSavedState: ?[*]u8, rawSavedStateSize: usize) callconv(.C) void {
+fn NativeActivity_onCreate(activity: *androidbind.ANativeActivity, rawSavedState: ?[*]u8, rawSavedStateSize: usize) callconv(.C) void {
     const savedState: []const u8 = if (rawSavedState) |s|
         s[0..rawSavedStateSize]
     else
