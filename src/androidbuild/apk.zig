@@ -203,13 +203,18 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                 }
             }
         }
-        if (apk.java_files.items.len == 0) {
-            // NOTE(jae): 2024-09-19
-            // We can probably avoid this with a stub or something but for now error so that an "adb install"
-            // doesn't give users:
-            // - Scanning Failed.: Package /data/app/base.apk code is missing]
-            try errors.append(b.fmt("must add at least one Java file to build", .{}));
-        }
+        // NOTE(jae): 2025-05-06
+        // This validation rule has been removed because if you have `android:hasCode="false"` in your AndroidManifest.xml file
+        // then you can have no Java files.
+        //
+        // If you do not provide Java files AND hasCode=false isn't set, then you may get the following error on "adb install"
+        // - Scanning Failed.: Package /data/app/base.apk code is missing]
+        //
+        // Ideally we may want to do something where we can utilize "aapt2 dump X" to determine if "hasCode" is set and if it isn't, throw
+        // an error at compilation time. Similar to how we use it to extract the package name from AndroidManifest.xml below (ie. "aapt2 dump packagename")
+        // if (apk.java_files.items.len == 0) {
+        //     try errors.append(b.fmt("must add at least one Java file to build OR you must setup your AndroidManifest.xml to have 'android:hasCode=false'", .{}));
+        // }
         if (errors.items.len > 0) {
             printErrorsAndExit("misconfigured Android APK", errors.items);
         }

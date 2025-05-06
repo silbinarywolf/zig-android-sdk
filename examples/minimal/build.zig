@@ -32,7 +32,9 @@ pub fn build(b: *std.Build) void {
         apk.addResourceDirectory(b.path("android/res"));
 
         // Add Java files
-        apk.addJavaSourceFile(.{ .file = b.path("android/src/NativeInvocationHandler.java") });
+        // - If you have 'android:hasCode="false"' in your AndroidManifest.xml then no Java files are required
+        //   see: https://developer.android.com/ndk/samples/sample_na
+        // apk.addJavaSourceFile(.{ .file = b.path("android/src/X.java") });
         break :blk apk;
     };
 
