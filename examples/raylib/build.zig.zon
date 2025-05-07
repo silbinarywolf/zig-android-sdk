@@ -1,0 +1,18 @@
+.{
+    .name = .raylib,
+    .version = "0.0.0",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0x13035e5cf42e313f,
+    .dependencies = .{
+        .raylib_zig = .{
+            .url = "git+https://github.com/lumenkeyes/raylib-zig#59263ae0f96f54fa96ba4cb1f77cd3b06cc8fa94",
+            .hash = "raylib_zig-5.6.0-dev-KE8REG8yBQDVpWX-ireikKit_2m0_E6DkdWGCssSXKHa",
+        },
+        .android = .{ .path = "../.." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
