@@ -1,10 +1,11 @@
 const android = @import("android");
 const std = @import("std");
 
-//this is targeting android API level 29. 
-//You may have to change the values here and in android/AndroidManifest.xml to target your desired API level
-const android_api = "29";
-const android_version = .android10;
+//This is targeting android version 10 / API level 29.
+//Change the value here and in android/AndroidManifest.xml to target your desired API level
+const android_version: android.APILevel = .android10;
+const android_api = std.fmt.comptimePrint("{}", .{@intFromEnum(android_version)});
+const exe_name = "raylib";
 
 pub fn build(b: *std.Build) void {
     const root_target = b.standardTargetOptions(.{});
@@ -23,8 +24,8 @@ pub fn build(b: *std.Build) void {
         }
         const android_tools = android.Tools.create(b, .{
             .api_level = android_version,
-            .build_tools_version = "35.0.0",
-            .ndk_version = "27.2.12479018",
+            .build_tools_version = "35.0.1",
+            .ndk_version = "29.0.13113456",
         });
         const apk = android.APK.create(b, android_tools);
 
@@ -36,48 +37,52 @@ pub fn build(b: *std.Build) void {
         break :blk apk;
     };
 
-    for(targets) |target| {
+    for (targets) |target| {
+        const lib_mod = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const lib = b.addLibrary(.{
+            .linkage = .dynamic,
+            .name = exe_name,
+            .root_module = lib_mod,
+        });
+        lib.linkLibC();
+        b.installArtifact(lib);
+
+        const android_ndk_path = b.fmt("{s}/ndk/{s}", .{ android_apk.?.tools.android_sdk_path, android_apk.?.tools.ndk_version });
+        const raylib_dep = if (target.result.abi.isAndroid()) (b.dependency("raylib_zig", .{ .target = target, .optimize = optimize, .android_api_version = @as([]const u8, android_api), .android_ndk = @as([]const u8, android_ndk_path) })) else (b.dependency("raylib_zig", .{
+            .target = target,
+            .optimize = optimize,
+        }));
+        const raylib_artifact = raylib_dep.artifact("raylib");
+        lib.linkLibrary(raylib_artifact);
+        const raylib_mod = raylib_dep.module("raylib");
+        lib.root_module.addImport("raylib", raylib_mod);
+
+        lib.root_module.linkSystemLibrary("EGL", .{ .preferred_link_mode = .dynamic });
+        lib.root_module.linkSystemLibrary("GLESv2", .{ .preferred_link_mode = .dynamic });
+
         if (target.result.abi.isAndroid()) {
-            const lib_mod = b.createModule(.{
-                .root_source_file = b.path("src/main.zig"),
-                .target = target,
-                .optimize = optimize,
-            });
-
-            const lib = b.addLibrary(.{
-                .linkage = .dynamic,
-                .name = "minimal_android_raylib",
-                .root_module = lib_mod,
-            });
-
-            b.installArtifact(lib);
-            lib.linkLibC();
-            const raylib_dep = b.dependency("raylib_zig", .{
-                    .target = target,
-                    .optimize = optimize,
-                    .android_api_version = @as([]const u8, android_api)
-            });
-            const raylib_artifact = raylib_dep.artifact("raylib");
-            lib.linkLibrary(raylib_artifact);
-
-            const raylib_mod = raylib_dep.module("raylib");
-            lib.root_module.addImport("raylib", raylib_mod);
             const apk: *android.APK = android_apk orelse @panic("Android APK should be initialized");
-
             const android_dep = b.dependency("android", .{
                 .optimize = optimize,
                 .target = target,
             });
+            lib.root_module.linkSystemLibrary("android", .{ .preferred_link_mode = .dynamic });
             lib.root_module.addImport("android", android_dep.module("android"));
-            lib.root_module.linkSystemLibrary("android", .{.preferred_link_mode = .dynamic});
-            lib.root_module.linkSystemLibrary("EGL", .{.preferred_link_mode = .dynamic});
-            lib.root_module.linkSystemLibrary("GLESv2", .{.preferred_link_mode = .dynamic});
-            lib.root_module.linkSystemLibrary("log", .{ .preferred_link_mode = .dynamic });
-            lib.root_module.addCSourceFile(.{ .file = b.path("src/android_native_app_glue.c")});
 
+            const native_app_glue_dir: std.Build.LazyPath = .{ .cwd_relative = b.fmt("{s}/sources/android/native_app_glue", .{android_ndk_path}) };
+            lib.root_module.addCSourceFile(.{ .file = native_app_glue_dir.path(b, "android_native_app_glue.c") });
+            lib.root_module.addIncludePath(native_app_glue_dir);
+
+            lib.root_module.linkSystemLibrary("log", .{ .preferred_link_mode = .dynamic });
             apk.addArtifact(lib);
         } else {
-            //non-android build logic...
+            const exe = b.addExecutable(.{ .name = exe_name, .optimize = optimize, .target = target });
+            exe.linkLibrary(lib);
+            b.installArtifact(exe);
         }
     }
     if (android_apk) |apk| {

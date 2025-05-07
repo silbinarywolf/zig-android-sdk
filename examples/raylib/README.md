@@ -1,7 +1,4 @@
-A minimal example of using [zig-android-sdk](https://github.com/silbinarywolf/zig-android-sdk) to build raylib for android.
-
-Build for a single target with, e.g. `zig build -Dtarget=aarch64-linux-android`, or for all android targets with `zig build -Dandroid=true`.
-
+# Raylib Example
 **Note**:
 Due to [an upstream bug](https://github.com/ziglang/zig/issues/20476), you will probably receive a warning (or multiple warnings if building for multiple targets) like this:
 ```
@@ -10,6 +7,53 @@ ld.lld: warning: <path-to-project>/.zig-cache/o/4227869d730f094811a7cdaaab535797
 ```
 You can ignore this error for now.
 
-You should probably source the `android_native_app_glue.c/.h` files from the version of the SDK you download, rather than using the included ones, to ensure you are using the most up-to-date versions.
+### Build, install to test one target against a local emulator and run
+
+```sh
+zig build -Dtarget=x86_64-linux-android
+adb install ./zig-out/bin/raylib.apk
+adb shell am start -S -W -n com.zig.raylib/android.app.NativeActivity
+```
+
+### Build and install for all supported Android targets
+
+```sh
+zig build -Dandroid=true
+adb install ./zig-out/bin/raylib.apk
+```
+
+### Build and run natively on your operating system
+
+```sh
+zig build run
+```
+
+### Uninstall your application
+
+If installing your application fails with something like:
+```
+adb: failed to install ./zig-out/bin/raylib.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package com.zig.raylib signatures do not match newer version; ignoring!]
+```
+
+```sh
+adb uninstall "com.zig.raylib"
+```
+
+### View logs of application
+
+Powershell (app doesn't need to be running)
+```sh
+adb logcat | Select-String com.zig.raylib:
+```
+
+Bash (app doesn't need running to be running)
+```sh
+adb logcat com.zig.raylib:D *:S
+```
+
+Bash (app must be running, logs everything by the process including modules)
+```sh
+adb logcat --pid=`adb shell pidof -s com.zig.raylib`
+```
 
 

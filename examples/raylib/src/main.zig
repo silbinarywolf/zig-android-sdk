@@ -1,5 +1,11 @@
 const std = @import("std");
 const rl = @import("raylib");
+
+//Other than exporting this function and changing the calling convention, you
+//can write your code fairly normally.
+//
+//The main function is not allowed to return zig errors, so you will have to
+//use "catch @panic()" or create other error handling functionality.
 export fn main() callconv(.C) void {
     const screenWidth = 800;
     const screenHeight = 450;
@@ -13,5 +19,5 @@ export fn main() callconv(.C) void {
         rl.clearBackground(.white);
 
         rl.drawText("Congrats! You created your first window!", 190, 200, 20, .light_gray);
-    } 
+    }
 }
