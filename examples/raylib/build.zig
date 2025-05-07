@@ -51,10 +51,17 @@ pub fn build(b: *std.Build) void {
         lib.linkLibC();
         b.installArtifact(lib);
 
-        const android_ndk_path = b.fmt("{s}/ndk/{s}", .{ android_apk.?.tools.android_sdk_path, android_apk.?.tools.ndk_version });
-        const raylib_dep = if (target.result.abi.isAndroid()) (b.dependency("raylib_zig", .{ .target = target, .optimize = optimize, .android_api_version = @as([]const u8, android_api), .android_ndk = @as([]const u8, android_ndk_path) })) else (b.dependency("raylib_zig", .{
-            .target = target,
-            .optimize = optimize,
+        const android_ndk_path = if(android_apk) |apk| (b.fmt("{s}/ndk/{s}", .{ apk.tools.android_sdk_path, apk.tools.ndk_version })) else "";
+        const raylib_dep = if (target.result.abi.isAndroid()) (
+             b.dependency("raylib_zig", .{ 
+                .target = target, 
+                .optimize = optimize, 
+                .android_api_version = @as([]const u8, android_api), 
+                .android_ndk = @as([]const u8, android_ndk_path) 
+        })) else (
+            b.dependency("raylib_zig", .{
+                .target = target,
+                .optimize = optimize,
         }));
         const raylib_artifact = raylib_dep.artifact("raylib");
         lib.linkLibrary(raylib_artifact);
