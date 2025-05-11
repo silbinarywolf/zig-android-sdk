@@ -135,6 +135,9 @@ const AndroidTargetQuery = struct {
             .abi = if (android_target.cpu_arch != .arm) .android else .androideabi,
             .cpu_arch = android_target.cpu_arch,
             .cpu_features_add = android_target.cpu_features_add,
+            // TODO(jae): 2025-05-11
+            // Setup Android API Level for Zig 0.14.0+
+            // .android_api_level = null,
         };
     }
 };
