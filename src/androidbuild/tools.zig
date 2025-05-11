@@ -585,6 +585,81 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8
             defer allocator.free(user);
             return try std.fmt.allocPrint(allocator, "/Users/{s}/Library/Android/sdk", .{user});
         },
+        // NOTE(jae: 2025-05-11
+        // Auto-discovery of Android SDK for Linux
+        // - /home/AccountName/Android/Sdk
+        // - /usr/lib/android-sdk
+        // - /Library/Android/sdk
+        // - /Users/[USER]/Library/Android/sdk
+        // Source: https://stackoverflow.com/a/34627928
+        .linux => {
+            {
+                const android_sdk_path = "/usr/lib/android-sdk";
+                const has_path: bool = pathblk: {
+                    std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
+                        error.FileNotFound => break :pathblk false, // fallthrough and try next
+                        else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
+                    };
+                    break :pathblk true;
+                };
+                if (has_path) {
+                    return android_sdk_path;
+                }
+            }
+
+            {
+                const android_sdk_path = "/Library/Android/sdk";
+                const has_path: bool = pathblk: {
+                    std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
+                        error.FileNotFound => break :pathblk false, // fallthrough and try next
+                        else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
+                    };
+                    break :pathblk true;
+                };
+                if (has_path) {
+                    return android_sdk_path;
+                }
+            }
+
+            // Check user paths
+            // - /home/AccountName/Android/Sdk
+            // - /Users/[USER]/Library/Android/sdk
+            const user = std.process.getEnvVarOwned(allocator, "USER") catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.EnvironmentVariableNotFound => &[0]u8{},
+                error.InvalidWtf8 => @panic("USER environment variable is invalid UTF-8"),
+            };
+            if (user.len > 0) {
+                {
+                    const android_sdk_path = try std.fmt.allocPrint(allocator, "/Users/{s}/Library/Android/sdk", .{user});
+                    const has_path: bool = pathblk: {
+                        std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
+                            error.FileNotFound => break :pathblk false, // fallthrough and try next
+                            else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
+                        };
+                        break :pathblk true;
+                    };
+                    if (has_path) {
+                        return android_sdk_path;
+                    }
+                }
+                {
+                    // NOTE(jae): 2025-05-11
+                    // No idea if /AccountName/ maps to $USER but going to assume it does for now.
+                    const android_sdk_path = try std.fmt.allocPrint(allocator, "/home/{s}/Android/Sdk", .{user});
+                    const has_path: bool = pathblk: {
+                        std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
+                            error.FileNotFound => break :pathblk false, // fallthrough and try next
+                            else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
+                        };
+                        break :pathblk true;
+                    };
+                    if (has_path) {
+                        return android_sdk_path;
+                    }
+                }
+            }
+        },
         else => {},
     }
     return &[0]u8{};
