@@ -68,9 +68,6 @@ pub fn build(b: *std.Build) void {
         const raylib_mod = raylib_dep.module("raylib");
         lib.root_module.addImport("raylib", raylib_mod);
 
-        lib.root_module.linkSystemLibrary("EGL", .{ .preferred_link_mode = .dynamic });
-        lib.root_module.linkSystemLibrary("GLESv2", .{ .preferred_link_mode = .dynamic });
-
         if (target.result.abi.isAndroid()) {
             const apk: *android.APK = android_apk orelse @panic("Android APK should be initialized");
             const android_dep = b.dependency("android", .{
