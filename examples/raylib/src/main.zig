@@ -3,11 +3,6 @@ const builtin = @import("builtin");
 const android = @import("android");
 const rl = @import("raylib");
 
-//Other than exporting this function and changing the calling convention, you
-//can write your code fairly normally.
-//
-//The main function is not allowed to return zig errors, so you will have to
-//use "catch @panic()" or create other error handling functionality.
 pub fn main() void {
     const screenWidth = 800;
     const screenHeight = 450;
