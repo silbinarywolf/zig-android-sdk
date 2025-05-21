@@ -57,11 +57,12 @@ pub fn build(b: *std.Build) void {
                 .target = target, 
                 .optimize = optimize, 
                 .android_api_version = @as([]const u8, android_api), 
-                .android_ndk = @as([]const u8, android_ndk_path) 
+                .android_ndk = @as([]const u8, android_ndk_path),
         })) else (
             b.dependency("raylib_zig", .{
                 .target = target,
                 .optimize = optimize,
+                .shared = true
         }));
         const raylib_artifact = raylib_dep.artifact("raylib");
         lib.linkLibrary(raylib_artifact);
@@ -84,8 +85,7 @@ pub fn build(b: *std.Build) void {
             lib.root_module.linkSystemLibrary("log", .{ .preferred_link_mode = .dynamic });
             apk.addArtifact(lib);
         } else {
-            const exe = b.addExecutable(.{ .name = exe_name, .optimize = optimize, .target = target });
-            exe.linkLibrary(lib);
+            const exe = b.addExecutable(.{ .name = exe_name, .optimize = optimize, .root_module = lib_mod });
             b.installArtifact(exe);
 
             const run_exe = b.addRunArtifact(exe);
