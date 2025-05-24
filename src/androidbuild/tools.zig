@@ -34,6 +34,7 @@ cmdline_tools: struct {
     /// lint [flags] <project directory>
     /// See documentation: https://developer.android.com/studio/write/lint#commandline
     lint: []const u8,
+    sdkmanager: []const u8,
 },
 /// Binaries provided by the JDK that usually exist in:
 /// - Non-Windows: $JAVA_HOME/bin
@@ -143,8 +144,8 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
     const exe_suffix = if (host_os_tag == .windows) ".exe" else "";
     const bat_suffix = if (host_os_tag == .windows) ".bat" else "";
 
-    const tools: *Sdk = b.allocator.create(Sdk) catch @panic("OOM");
-    tools.* = .{
+    const sdk: *Sdk = b.allocator.create(Sdk) catch @panic("OOM");
+    sdk.* = .{
         .b = b,
         .android_sdk_path = android_sdk_path,
         .jdk_path = jdk_path,
@@ -152,8 +153,9 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
             .lint = b.pathResolve(&[_][]const u8{
                 cmdline_tools_path, b.fmt("lint{s}", .{bat_suffix}),
             }),
-            // NOTE(jae): 2024-09-28
-            // Consider adding sdkmanager.bat so you can do something like "zig build sdkmanager -- {args}"
+            .sdkmanager = b.pathResolve(&[_][]const u8{
+                cmdline_tools_path, b.fmt("sdkmanager{s}", .{bat_suffix}),
+            }),
         },
         .java_tools = .{
             .jar = b.pathResolve(&[_][]const u8{
@@ -167,11 +169,32 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
             }),
         },
     };
-    return tools;
+    return sdk;
 }
 
-pub fn createApk(tools: *Sdk, options: Apk.Options) *Apk {
-    return Apk.create(tools, options);
+pub fn createApk(sdk: *Sdk, options: Apk.Options) *Apk {
+    return Apk.create(sdk, options);
+}
+
+// TODO: Consider adding step to run: sdkmanager --install "ndk;21.3.6528147"
+// pub fn installNdkVersion(ndk_version: []const u8) *Step {
+// }
+
+/// EXPERIMENTAL: Allows invoking the Android SDK manager
+/// ie. zig build -Dandroid sdkmanager -- --help
+pub fn addSdkManagerStep(sdk: *Sdk) void {
+    const b = sdk.b;
+    const sdkmanager_step = b.step("sdkmanager", "Run the Android SDK Manager");
+    const args = b.args orelse &.{};
+    const sdkmanager = b.addSystemCommand(&.{sdk.cmdline_tools.sdkmanager});
+    sdkmanager.setEnvironmentVariable("SKIP_JDK_VERSION_CHECK", "1");
+    if (b.verbose) {
+        sdkmanager.addArg("--verbose");
+    }
+    sdkmanager_step.dependOn(&sdkmanager.step);
+    for (args) |arg| {
+        sdkmanager.addArg(arg);
+    }
 }
 
 pub const CreateKey = struct {
@@ -206,11 +229,11 @@ pub const CreateKey = struct {
     };
 };
 
-pub fn createKeyStore(tools: *const Sdk, options: CreateKey) KeyStore {
-    const b = tools.b;
+pub fn createKeyStore(sdk: *const Sdk, options: CreateKey) KeyStore {
+    const b = sdk.b;
     const keytool = b.addSystemCommand(&.{
         // https://docs.oracle.com/en/java/javase/17/docs/specs/man/keytool.html
-        tools.java_tools.keytool,
+        sdk.java_tools.keytool,
         "-genkey",
         "-v",
     });
@@ -301,10 +324,6 @@ pub fn createOrGetLibCFile(tools: *Sdk, compile: *Step.Compile, android_api_leve
     const write_file = b.addWriteFiles();
     const android_libc_path = write_file.add(filename, libc_file_contents);
     return android_libc_path;
-}
-
-pub fn getSystemIncludePath(_: *const Sdk, _: ResolvedTarget) []const u8 {
-    @compileError("getSystemIncludePath has moved from Tools to Apk");
 }
 
 /// Search JDK_HOME, and then JAVA_HOME
