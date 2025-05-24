@@ -71,14 +71,12 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
                 .target = target,
             });
-            lib.root_module.linkSystemLibrary("android", .{ .preferred_link_mode = .dynamic });
             lib.root_module.addImport("android", android_dep.module("android"));
+            lib.root_module.linkSystemLibrary("android", .{});
 
             const native_app_glue_dir: std.Build.LazyPath = .{ .cwd_relative = b.fmt("{s}/sources/android/native_app_glue", .{apk.ndk.path}) };
             lib.root_module.addCSourceFile(.{ .file = native_app_glue_dir.path(b, "android_native_app_glue.c") });
             lib.root_module.addIncludePath(native_app_glue_dir);
-
-            lib.root_module.linkSystemLibrary("log", .{ .preferred_link_mode = .dynamic });
             apk.addArtifact(lib);
         } else {
             const exe = b.addExecutable(.{ .name = exe_name, .optimize = optimize, .root_module = lib_mod });
