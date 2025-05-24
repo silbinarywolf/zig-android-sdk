@@ -31,10 +31,7 @@ pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
             .id = base_id,
             .name = androidbuild.runNameContext("d8glob"),
             .owner = owner,
-            .makeFn = comptime if (std.mem.eql(u8, builtin.zig_version_string, "0.13.0"))
-                make013
-            else
-                makeLatest,
+            .makeFn = make,
         }),
         .run = run,
         .dir = dir,
@@ -45,19 +42,7 @@ pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
     dir.addStepDependencies(&glob.step);
 }
 
-/// make for zig 0.13.0
-fn make013(step: *Step, prog_node: std.Progress.Node) !void {
-    _ = prog_node; // autofix
-    try make(step);
-}
-
-/// make for zig 0.14.0+
-fn makeLatest(step: *Step, options: Build.Step.MakeOptions) !void {
-    _ = options; // autofix
-    try make(step);
-}
-
-fn make(step: *Step) !void {
+fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const b = step.owner;
     const arena = b.allocator;
     const glob: *@This() = @fieldParentPtr("step", step);
