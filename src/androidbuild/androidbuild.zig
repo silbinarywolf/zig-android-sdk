@@ -7,11 +7,14 @@ const LazyPath = std.Build.LazyPath;
 
 const log = std.log.scoped(.@"zig-android-sdk");
 
+/// Deprecated: Use ApiLevel
+pub const APILevel = ApiLevel;
+
 /// API Level is an enum the maps the Android OS version to the API level
 ///
 /// https://en.wikipedia.org/wiki/Android_version_history
 /// https://apilevels.com/
-pub const APILevel = enum(u32) {
+pub const ApiLevel = enum(u32) {
     /// KitKat (2013)
     /// Android 4.4 = 19
     android4_4 = 19,
