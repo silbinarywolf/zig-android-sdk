@@ -20,7 +20,8 @@ pub fn build(b: *std.Build) void {
         if (android_targets.len == 0) {
             break :blk null;
         }
-        const android_tools = android.Tools.create(b, .{
+        const android_tools = android.Tools.create(b, .{});
+        const apk = android.Apk.create(b, android_tools, .{
             .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
@@ -34,7 +35,6 @@ pub fn build(b: *std.Build) void {
             //  - ndk/27.0.12077973/toolchains/llvm/prebuilt/{OS}-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42:
             //  - error: expression is not an integral constant expression
         });
-        const apk = android.APK.create(b, android_tools);
 
         const key_store_file = android_tools.createKeyStore(android.CreateKey.example());
         apk.setKeyStore(key_store_file);

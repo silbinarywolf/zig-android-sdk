@@ -19,12 +19,12 @@ pub fn build(b: *std.Build) void {
         if (android_targets.len == 0) {
             break :blk null;
         }
-        const android_tools = android.Tools.create(b, .{
+        const android_tools = android.Tools.create(b, .{});
+        const apk = android.APK.create(b, android_tools, .{
             .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
         });
-        const apk = android.APK.create(b, android_tools);
 
         const key_store_file = android_tools.createKeyStore(android.CreateKey.example());
         apk.setKeyStore(key_store_file);

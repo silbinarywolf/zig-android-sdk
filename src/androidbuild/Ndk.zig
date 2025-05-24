@@ -11,6 +11,8 @@ const ApiLevel = androidbuild.ApiLevel;
 android_sdk_path: []const u8,
 /// ie. "27.0.12077973"
 version: []const u8,
+/// ie. "$ANDROID_HOME/ndk/{ndk_version}"
+path: []const u8,
 /// ie. "$ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot"
 sysroot_path: []const u8,
 /// ie. "$ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot/usr/include"
@@ -19,6 +21,7 @@ include_path: []const u8,
 pub const empty: Ndk = .{
     .android_sdk_path = &[0]u8{},
     .version = &[0]u8{},
+    .path = &[0]u8{},
     .sysroot_path = &[0]u8{},
     .include_path = &[0]u8{},
 };
@@ -65,7 +68,7 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
 
     // Get NDK sysroot path
     // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot
-    const android_ndk_sysroot = b.fmt("{s}/ndk/{s}/toolchains/llvm/prebuilt/{s}/sysroot", .{
+    const ndk_sysroot = b.fmt("{s}/ndk/{s}/toolchains/llvm/prebuilt/{s}/sysroot", .{
         android_sdk_path,
         ndk_version,
         host_os_and_arch,
@@ -73,11 +76,11 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
 
     // Check if NDK sysroot path is accessible
     const has_ndk_sysroot = blk: {
-        std.fs.accessAbsolute(android_ndk_sysroot, .{}) catch |err| switch (err) {
+        std.fs.accessAbsolute(ndk_sysroot, .{}) catch |err| switch (err) {
             error.FileNotFound => {
                 const message = b.fmt("Android NDK sysroot '{s}' had unexpected error. Missing at '{s}'", .{
                     ndk_version,
-                    android_ndk_sysroot,
+                    ndk_sysroot,
                 });
                 try errors.append(message);
                 break :blk false;
@@ -86,7 +89,7 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
                 const message = b.fmt("Android NDK sysroot '{s}' had unexpected error: {s}, at: '{s}'", .{
                     ndk_version,
                     @errorName(err),
-                    android_ndk_sysroot,
+                    ndk_sysroot,
                 });
                 try errors.append(message);
                 break :blk false;
@@ -98,12 +101,14 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
         return error.NdkFailed;
     }
 
-    return .{
+    const ndk: Ndk = .{
         .android_sdk_path = android_sdk_path,
+        .path = android_ndk_path,
         .version = ndk_version,
-        .sysroot_path = android_ndk_sysroot,
-        .include_path = b.fmt("{s}/usr/include", .{android_ndk_sysroot}),
+        .sysroot_path = ndk_sysroot,
+        .include_path = b.fmt("{s}/usr/include", .{ndk_sysroot}),
     };
+    return ndk;
 }
 
 pub fn validateApiLevel(ndk: *const Ndk, b: *std.Build, api_level: ApiLevel, errors: *std.ArrayList([]const u8)) void {

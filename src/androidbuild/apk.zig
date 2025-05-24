@@ -3,9 +3,12 @@ const androidbuild = @import("androidbuild.zig");
 const Tools = @import("tools.zig");
 const BuiltinOptionsUpdate = @import("builtin_options_update.zig");
 
+const Ndk = @import("Ndk.zig");
+const BuildTools = @import("BuildTools.zig");
+const D8Glob = @import("d8glob.zig");
+
 const ApiLevel = androidbuild.ApiLevel;
 const KeyStore = androidbuild.KeyStore;
-const D8Glob = @import("d8glob.zig");
 const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
 const printErrorsAndExit = androidbuild.printErrorsAndExit;
@@ -30,29 +33,54 @@ pub const Resource = union(enum) {
 
 b: *std.Build,
 tools: *const Tools,
+/// Path to Native Development Kit, this includes various C-code headers, libraries, and more.
+/// ie. $ANDROID_HOME/ndk/29.0.13113456
+ndk: Ndk,
+/// Paths to Build Tools such as aapt2, zipalign
+/// ie. $ANDROID_HOME/build-tools/35.0.0
+build_tools: BuildTools,
 
+api_level: ApiLevel,
 key_store: ?KeyStore,
-
 android_manifest: ?LazyPath,
 artifacts: std.ArrayListUnmanaged(*Step.Compile),
 java_files: std.ArrayListUnmanaged(LazyPath),
 resources: std.ArrayListUnmanaged(Resource),
 
 // TODO: Move these Options from androidbuild/tools.zig
-// pub const Options = struct {
-//     /// ie. "35.0.0"
-//     build_tools_version: []const u8,
-//     /// ie. "27.0.12077973"
-//     ndk_version: []const u8,
-//     /// ie. .android15 = 35 (android 15 uses API version 35)
-//     api_level: ApiLevel,
-// };
+pub const Options = struct {
+    /// ie. "35.0.0"
+    build_tools_version: []const u8,
+    /// ie. "27.0.12077973"
+    ndk_version: []const u8,
+    /// ie. .android15 = 35 (android 15 uses API version 35)
+    api_level: ApiLevel,
+};
 
-pub fn create(b: *std.Build, tools: *const Tools) *Apk {
+pub fn create(b: *std.Build, tools: *const Tools, options: Options) *Apk {
+    var errors = std.ArrayList([]const u8).init(b.allocator);
+    defer errors.deinit();
+
+    const build_tools = BuildTools.init(b, tools.android_sdk_path, options.build_tools_version, &errors) catch |err| switch (err) {
+        error.BuildToolFailed => BuildTools.empty, // fallthruogh and print all errors below
+        error.OutOfMemory => @panic("OOM"),
+    };
+    const ndk = Ndk.init(b, tools.android_sdk_path, options.ndk_version, &errors) catch |err| switch (err) {
+        error.NdkFailed => Ndk.empty, // fallthrough and print all errors below
+        error.OutOfMemory => @panic("OOM"),
+    };
+    ndk.validateApiLevel(b, options.api_level, &errors);
+    if (errors.items.len > 0) {
+        printErrorsAndExit("unable to find required Android installation", errors.items);
+    }
+
     const apk: *Apk = b.allocator.create(Apk) catch @panic("OOM");
     apk.* = .{
         .b = b,
         .tools = tools,
+        .ndk = ndk,
+        .build_tools = build_tools,
+        .api_level = options.api_level,
         .key_store = null,
         .android_manifest = null,
         .artifacts = .empty,
@@ -127,7 +155,7 @@ pub fn setKeyStore(apk: *Apk, key_store: KeyStore) void {
 
 fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
     const b = apk.b;
-    const android_ndk_sysroot = apk.tools.ndk.sysroot_path;
+    const android_ndk_sysroot = apk.ndk.sysroot_path;
 
     // get target
     const target: ResolvedTarget = module.resolved_target orelse {
@@ -139,7 +167,7 @@ fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
     // These *must* be in order of API version, then architecture, then non-arch specific otherwise
     // when starting an *.so from Android or an emulator you can get an error message like this:
     // - "java.lang.UnsatisfiedLinkError: dlopen failed: TLS symbol "_ZZN8gwp_asan15getThreadLocalsEvE6Locals" in dlopened"
-    const android_api_version: u32 = @intFromEnum(apk.tools.api_level);
+    const android_api_version: u32 = @intFromEnum(apk.api_level);
 
     // NOTE(jae): 2025-03-09
     // Resolve issue where building SDL2 gets the following error for 'arm-linux-androideabi'
@@ -150,7 +178,7 @@ fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
     // ie. $ANDROID_HOME/ndk/{ndk_version}/sources/android/cpufeatures
     if (target.result.cpu.arch == .arm) {
         module.addIncludePath(.{
-            .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.tools.android_sdk_path, apk.tools.ndk.version }),
+            .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.tools.android_sdk_path, apk.ndk.version }),
         });
     }
 
@@ -256,7 +284,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     const root_jar = b.pathResolve(&[_][]const u8{
         apk.tools.android_sdk_path,
         "platforms",
-        b.fmt("android-{d}", .{@intFromEnum(apk.tools.api_level)}),
+        b.fmt("android-{d}", .{@intFromEnum(apk.api_level)}),
         "android.jar",
     });
 
@@ -271,7 +299,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // Snapshot: http://web.archive.org/web/20241001070128/https://developer.android.com/tools/aapt2#aapt2_element_hierarchy
     const resources_apk: LazyPath = blk: {
         const aapt2link = b.addSystemCommand(&[_][]const u8{
-            apk.tools.build_tools.aapt2,
+            apk.build_tools.aapt2,
             "link",
             "-I", // add an existing package to base include set
             root_jar,
@@ -295,7 +323,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
 
         aapt2link.addArgs(&[_][]const u8{
             "--target-sdk-version",
-            b.fmt("{d}", .{@intFromEnum(apk.tools.api_level)}),
+            b.fmt("{d}", .{@intFromEnum(apk.api_level)}),
         });
 
         // NOTE(jae): 2024-10-02
@@ -329,7 +357,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                 switch (resource) {
                     .directory => |resource_directory| {
                         const aapt2compile = b.addSystemCommand(&[_][]const u8{
-                            apk.tools.build_tools.aapt2,
+                            apk.build_tools.aapt2,
                             "compile",
                         });
                         aapt2compile.setName(runNameContext("aapt2 compile [dir]"));
@@ -355,7 +383,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
 
     const package_name_file = blk: {
         const aapt2packagename = b.addSystemCommand(&[_][]const u8{
-            apk.tools.build_tools.aapt2,
+            apk.build_tools.aapt2,
             "dump",
             "packagename",
         });
@@ -437,8 +465,8 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                         continue;
                     }
                     const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
-                    translate_c.addIncludePath(.{ .cwd_relative = apk.tools.ndk.include_path });
-                    translate_c.addSystemIncludePath(.{ .cwd_relative = apk.tools.getSystemIncludePath(c_translate_target) });
+                    translate_c.addIncludePath(.{ .cwd_relative = apk.ndk.include_path });
+                    translate_c.addSystemIncludePath(.{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) });
                 },
                 else => continue,
             }
@@ -459,7 +487,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                     updateSharedLibraryOptions(artifact);
                 }
             }
-            apk.tools.setLibCFile(artifact);
+            apk.setLibCFile(artifact);
             apk.addLibraryPaths(artifact.root_module);
             artifact.linkLibC();
 
@@ -501,7 +529,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // From d8.bat
         // call "%java_exe%" %javaOpts% -cp "%jarpath%" com.android.tools.r8.D8 %params%
         const d8 = b.addSystemCommand(&[_][]const u8{
-            apk.tools.build_tools.d8,
+            apk.build_tools.d8,
         });
         d8.setName(runNameContext("d8"));
 
@@ -641,7 +669,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // Align contents of .apk (zip)
     const aligned_apk_file: LazyPath = blk: {
         var zipalign = b.addSystemCommand(&[_][]const u8{
-            apk.tools.build_tools.zipalign,
+            apk.build_tools.zipalign,
         });
         zipalign.setName(runNameContext("zipalign"));
 
@@ -672,7 +700,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // Sign apk
     const signed_apk_file: LazyPath = blk: {
         const apksigner = b.addSystemCommand(&[_][]const u8{
-            apk.tools.build_tools.apksigner,
+            apk.build_tools.apksigner,
             "sign",
         });
         apksigner.setName(runNameContext("apksigner"));
@@ -687,6 +715,17 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
 
     const install_apk = b.addInstallBinFile(signed_apk_file, b.fmt("{s}.apk", .{apk_name}));
     return install_apk;
+}
+
+fn getSystemIncludePath(apk: *Apk, target: ResolvedTarget) []const u8 {
+    const b = apk.b;
+    const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
+    return b.fmt("{s}/{s}", .{ apk.ndk.include_path, system_target });
+}
+
+fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
+    const tools = apk.tools;
+    tools.setLibCFile(compile, apk.api_level, apk.ndk.sysroot_path, apk.ndk.version);
 }
 
 fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8, raw_top_level_apk_files: *Step.WriteFile) void {
@@ -711,7 +750,7 @@ fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8
                         if (artifact.root_module.link_libc == true or
                             artifact.root_module.link_libcpp == true)
                         {
-                            apk.tools.setLibCFile(artifact);
+                            apk.setLibCFile(artifact);
                         }
 
                         // Add library paths to find "android", "log", etc
@@ -749,7 +788,7 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
 
     const system_target = getAndroidTriple(artifact.root_module.resolved_target.?) catch |err| @panic(@errorName(err));
     const lib_path: LazyPath = .{
-        .cwd_relative = b.pathJoin(&.{ apk.tools.ndk.sysroot_path, "usr", "lib", system_target, "libc++abi.a" }),
+        .cwd_relative = b.pathJoin(&.{ apk.ndk.sysroot_path, "usr", "lib", system_target, "libc++abi.a" }),
     };
     const libcpp_workaround = b.addWriteFiles();
     const libcppabi_dir = libcpp_workaround.addCopyFile(lib_path, "libc++abi_zig_workaround.a").dirname();

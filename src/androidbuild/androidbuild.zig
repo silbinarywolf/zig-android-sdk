@@ -15,6 +15,7 @@ pub const APILevel = ApiLevel;
 /// https://en.wikipedia.org/wiki/Android_version_history
 /// https://apilevels.com/
 pub const ApiLevel = enum(u32) {
+    none = 0,
     /// KitKat (2013)
     /// Android 4.4 = 19
     android4_4 = 19,

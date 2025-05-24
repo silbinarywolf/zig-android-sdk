@@ -25,16 +25,8 @@ b: *Build,
 
 /// On most platforms this will map to the $ANDROID_HOME environment variable
 android_sdk_path: []const u8,
-/// ie. .android15 = 35 (android 15 uses API version 35)
-api_level: ApiLevel,
-/// Path to Native Development Kit, this includes various C-code headers, libraries, and more.
-/// ie. $ANDROID_HOME/ndk/29.0.13113456
-ndk: Ndk,
 // $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
 jdk_path: []const u8,
-/// Paths to Build Tools such as aapt2, zipalign
-/// ie. $ANDROID_HOME/build-tools/35.0.0
-build_tools: BuildTools,
 /// ie. $ANDROID_HOME/cmdline_tools/bin or $ANDROID_HOME/tools/bin
 ///
 /// Available to download at: https://developer.android.com/studio#command-line-tools-only
@@ -64,15 +56,15 @@ java_tools: struct {
 pub const ToolsOptions = Options;
 
 pub const Options = struct {
-    /// ie. "35.0.0"
-    build_tools_version: []const u8,
-    /// ie. "27.0.12077973"
-    ndk_version: []const u8,
-    /// ie. .android15 = 35 (android 15 uses API version 35)
-    api_level: ApiLevel,
+    // /// ie. "35.0.0"
+    // build_tools_version: []const u8,
+    // /// ie. "27.0.12077973"
+    // ndk_version: []const u8,
+    // /// ie. .android15 = 35 (android 15 uses API version 35)
+    // api_level: ApiLevel,
 };
 
-pub fn create(b: *std.Build, options: Options) *Tools {
+pub fn create(b: *std.Build, _: Options) *Tools {
     const host_os_tag = b.graph.host.result.os.tag;
 
     // Discover tool paths
@@ -152,17 +144,6 @@ pub fn create(b: *std.Build, options: Options) *Tools {
         break :cmdlineblk cmdline_tools;
     };
 
-    const build_tools = BuildTools.init(b, android_sdk_path, options.build_tools_version, &errors) catch |err| switch (err) {
-        error.BuildToolFailed => BuildTools.empty, // fallthruogh and print all errors below
-        error.OutOfMemory => @panic("OOM"),
-    };
-
-    const ndk = Ndk.init(b, android_sdk_path, options.ndk_version, &errors) catch |err| switch (err) {
-        error.NdkFailed => Ndk.empty, // fallthrough and print all errors below
-        error.OutOfMemory => @panic("OOM"),
-    };
-    ndk.validateApiLevel(b, options.api_level, &errors);
-
     if (errors.items.len > 0) {
         printErrorsAndExit("unable to find required Android installation", errors.items);
     }
@@ -174,10 +155,7 @@ pub fn create(b: *std.Build, options: Options) *Tools {
     tools.* = .{
         .b = b,
         .android_sdk_path = android_sdk_path,
-        .api_level = options.api_level,
         .jdk_path = jdk_path,
-        .ndk = ndk,
-        .build_tools = build_tools,
         .cmdline_tools = .{
             .lint = b.pathResolve(&[_][]const u8{
                 cmdline_tools_path, b.fmt("lint{s}", .{bat_suffix}),
@@ -276,27 +254,27 @@ pub fn createKeyStore(tools: *const Tools, options: CreateKey) KeyStore {
 
 // TODO: Consider making this be setup on "create" and then we just pass in the "android_libc_writefile"
 // anytime setLibCFile is called
-pub fn setLibCFile(tools: *const Tools, compile: *Step.Compile) void {
+pub fn setLibCFile(tools: *const Tools, compile: *Step.Compile, android_api_level: ApiLevel, ndk_sysroot_path: []const u8, ndk_version: []const u8) void {
     const b = tools.b;
 
     const target: ResolvedTarget = compile.root_module.resolved_target orelse @panic("no 'target' set on Android module");
+    // const android_api_level: ApiLevel = @enumFromInt(target.result.os.version_range.linux.android);
+    // if (android_api_level == .none) @panic("no 'android' api level set on target");
     const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
 
     const android_libc_path = createLibC(
         b,
         system_target,
-        tools.api_level,
-        tools.ndk.sysroot_path,
-        tools.ndk.version,
+        android_api_level,
+        ndk_sysroot_path,
+        ndk_version,
     );
     android_libc_path.addStepDependencies(&compile.step);
     compile.setLibCFile(android_libc_path);
 }
 
-pub fn getSystemIncludePath(tools: *const Tools, target: ResolvedTarget) []const u8 {
-    const b = tools.b;
-    const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
-    return b.fmt("{s}/{s}", .{ tools.ndk.include_path, system_target });
+pub fn getSystemIncludePath(_: *const Tools, _: ResolvedTarget) []const u8 {
+    @compileError("getSystemIncludePath has moved from Tools to Apk");
 }
 
 fn createLibC(b: *std.Build, system_target: []const u8, android_version: ApiLevel, ndk_sysroot_path: []const u8, ndk_version: []const u8) LazyPath {
