@@ -7,8 +7,8 @@ const Ndk = @import("Ndk.zig");
 const BuildTools = @import("BuildTools.zig");
 const D8Glob = @import("d8glob.zig");
 
+const KeyStore = Tools.KeyStore;
 const ApiLevel = androidbuild.ApiLevel;
-const KeyStore = androidbuild.KeyStore;
 const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
 const printErrorsAndExit = androidbuild.printErrorsAndExit;
@@ -150,7 +150,7 @@ pub fn addJavaSourceFiles(apk: *Apk, options: AddJavaSourceFilesOptions) void {
 /// This is required run on an Android device.
 ///
 /// If you want to just use a temporary key for local development, do something like this:
-/// - apk.setKeyStore(android_tools.createKeyStore(android.CreateKey.example()));
+/// - apk.setKeyStore(android_sdk.createKeyStore(.example);
 pub fn setKeyStore(apk: *Apk, key_store: KeyStore) void {
     apk.key_store = key_store;
 }
@@ -205,10 +205,7 @@ pub fn addInstallApk(apk: *Apk) *Step.InstallFile {
 fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     const b = apk.b;
 
-    const key_store: KeyStore = apk.key_store orelse .{
-        .file = .{ .cwd_relative = "" },
-        .password = "",
-    };
+    const key_store: KeyStore = apk.key_store orelse .empty;
 
     // validate
     {

@@ -7,7 +7,6 @@ const RegistryWtf8 = @import("WindowsSdk.zig").RegistryWtf8;
 const windows = std.os.windows;
 
 const ApiLevel = androidbuild.ApiLevel;
-const KeyStore = androidbuild.KeyStore;
 const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
 const printErrorsAndExit = androidbuild.printErrorsAndExit;
@@ -459,6 +458,16 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8
     }
     return &[0]u8{};
 }
+
+pub const KeyStore = struct {
+    file: LazyPath,
+    password: []const u8,
+
+    pub const empty: KeyStore = .{
+        .file = .{ .cwd_relative = "" },
+        .password = "",
+    };
+};
 
 /// Searches your PATH environment variable directories for adb, jarsigner, etc
 const PathSearch = struct {

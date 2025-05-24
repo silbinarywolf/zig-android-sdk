@@ -7,9 +7,6 @@ const LazyPath = std.Build.LazyPath;
 
 const log = std.log.scoped(.@"zig-android-sdk");
 
-/// Deprecated: Use ApiLevel
-pub const APILevel = ApiLevel;
-
 /// API Level is an enum the maps the Android OS version to the API level
 ///
 /// https://en.wikipedia.org/wiki/Android_version_history
@@ -45,11 +42,6 @@ pub const ApiLevel = enum(u32) {
     android16 = 36,
     // allow custom overrides (incase this library is not up to date with the latest android version)
     _,
-};
-
-pub const KeyStore = struct {
-    file: LazyPath,
-    password: []const u8,
 };
 
 pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]const u8 {

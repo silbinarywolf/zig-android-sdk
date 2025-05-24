@@ -6,11 +6,13 @@ const androidbuild = @import("src/androidbuild/androidbuild.zig");
 // TODO: rename tools.zig to Sdk.zig
 pub const Sdk = @import("src/androidbuild/tools.zig");
 pub const Apk = @import("src/androidbuild/apk.zig");
-pub const APILevel = androidbuild.APILevel; // TODO(jae): 2025-03-13: Consider deprecating and using 'ApiLevel' to be conventional to Zig
+pub const ApiLevel = androidbuild.ApiLevel;
 pub const standardTargets = androidbuild.standardTargets;
 
-// Deprecated exposes fields
+// Deprecated exposed fields
 
+/// Deprecated: Use ApiLevel
+pub const APILevel = @compileError("use android.ApiLevel instead of android.APILevel");
 /// Deprecated: Use Sdk instead
 pub const Tools = @compileError("Use android.Sdk instead of android.Tools");
 /// Deprecated: Use Apk.Options instead.
