@@ -32,14 +32,15 @@ pub const Resource = union(enum) {
 };
 
 b: *std.Build,
-tools: *const Tools,
+tools: *Tools,
 /// Path to Native Development Kit, this includes various C-code headers, libraries, and more.
 /// ie. $ANDROID_HOME/ndk/29.0.13113456
 ndk: Ndk,
 /// Paths to Build Tools such as aapt2, zipalign
 /// ie. $ANDROID_HOME/build-tools/35.0.0
 build_tools: BuildTools,
-
+/// API Level is the target Android API Level
+/// ie. .android15 = 35 (android 15 uses API version 35)
 api_level: ApiLevel,
 key_store: ?KeyStore,
 android_manifest: ?LazyPath,
@@ -47,7 +48,6 @@ artifacts: std.ArrayListUnmanaged(*Step.Compile),
 java_files: std.ArrayListUnmanaged(LazyPath),
 resources: std.ArrayListUnmanaged(Resource),
 
-// TODO: Move these Options from androidbuild/tools.zig
 pub const Options = struct {
     /// ie. "35.0.0"
     build_tools_version: []const u8,
@@ -57,7 +57,9 @@ pub const Options = struct {
     api_level: ApiLevel,
 };
 
-pub fn create(b: *std.Build, tools: *const Tools, options: Options) *Apk {
+pub fn create(tools: *Tools, options: Options) *Apk {
+    const b = tools.b;
+
     var errors = std.ArrayList([]const u8).init(b.allocator);
     defer errors.deinit();
 
@@ -725,7 +727,9 @@ fn getSystemIncludePath(apk: *Apk, target: ResolvedTarget) []const u8 {
 
 fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
     const tools = apk.tools;
-    tools.setLibCFile(compile, apk.api_level, apk.ndk.sysroot_path, apk.ndk.version);
+    const android_libc_path = tools.createOrGetLibCFile(compile, apk.api_level, apk.ndk.sysroot_path, apk.ndk.version);
+    android_libc_path.addStepDependencies(&compile.step);
+    compile.setLibCFile(android_libc_path);
 }
 
 fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8, raw_top_level_apk_files: *Step.WriteFile) void {

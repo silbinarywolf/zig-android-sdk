@@ -18,14 +18,13 @@ pub fn build(b: *std.Build) void {
     const android_apk: ?*android.Apk = blk: {
         if (android_targets.len == 0) break :blk null;
 
-        const android_tools = android.Tools.create(b, .{});
-        const apk = android.Apk.create(b, android_tools, .{
+        const android_sdk = android.Sdk.create(b, .{});
+        const apk = android_sdk.createApk(.{
             .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
         });
-
-        const key_store_file = android_tools.createKeyStore(android.CreateKey.example());
+        const key_store_file = android_sdk.createKeyStore(android.CreateKey.example());
         apk.setKeyStore(key_store_file);
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
         apk.addResourceDirectory(b.path("android/res"));

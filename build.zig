@@ -3,11 +3,9 @@ const androidbuild = @import("src/androidbuild/androidbuild.zig");
 
 // Expose Android build functionality for use in your build.zig
 
-// TODO: Make this public and deprecate Tools
-const Sdk = @import("src/androidbuild/tools.zig");
-
+// TODO: rename tools.zig to Sdk.zig
+pub const Sdk = @import("src/androidbuild/tools.zig");
 pub const Apk = @import("src/androidbuild/apk.zig");
-
 pub const APILevel = androidbuild.APILevel; // TODO(jae): 2025-03-13: Consider deprecating and using 'ApiLevel' to be conventional to Zig
 pub const standardTargets = androidbuild.standardTargets;
 
