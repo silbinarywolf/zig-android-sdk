@@ -197,16 +197,14 @@ pub const CreateKey = struct {
     distinguished_name: []const u8,
 
     /// Generates an example key that you can use for debugging your application locally
-    pub fn example() @This() {
-        return .{
-            .alias = "default",
-            .password = "example_password",
-            .algorithm = .rsa,
-            .key_size_in_bits = 4096,
-            .validity_in_days = 10_000,
-            .distinguished_name = "CN=example.com, OU=ID, O=Example, L=Doe, S=Jane, C=GB",
-        };
-    }
+    pub const example: CreateKey = .{
+        .alias = "default",
+        .password = "example_password",
+        .algorithm = .rsa,
+        .key_size_in_bits = 4096,
+        .validity_in_days = 10_000,
+        .distinguished_name = "CN=example.com, OU=ID, O=Example, L=Doe, S=Jane, C=GB",
+    };
 };
 
 pub fn createKeyStore(tools: *const Sdk, options: CreateKey) KeyStore {

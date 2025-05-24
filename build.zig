@@ -12,13 +12,13 @@ pub const standardTargets = androidbuild.standardTargets;
 // Deprecated exposes fields
 
 /// Deprecated: Use Sdk instead
-pub const Tools = @import("src/androidbuild/tools.zig");
-/// Deprecated: Use Sdk.Options instead.
-pub const ToolsOptions = Sdk.Options;
+pub const Tools = @compileError("Use android.Sdk instead of android.Tools");
+/// Deprecated: Use Apk.Options instead.
+pub const ToolsOptions = @compileError("Use android.Sdk.Options instead of android.Apk.Options with the Sdk.createApk method");
 /// Deprecated: Use Sdk.CreateKey instead.
-pub const CreateKey = Sdk.CreateKey;
+pub const CreateKey = @compileError("Use android.Sdk.CreateKey instead of android.CreateKey");
 /// Deprecated: Use Apk not APK
-pub const APK = Apk;
+pub const APK = @compileError("Use android.Apk instead of android.APK");
 
 /// NOTE: As well as providing the "android" module this declaration is required so this can be imported by other build.zig files
 pub fn build(b: *std.Build) void {

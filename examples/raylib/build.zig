@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
             .ndk_version = "29.0.13113456",
         });
 
-        const key_store_file = android_sdk.createKeyStore(android.CreateKey.example());
+        const key_store_file = android_sdk.createKeyStore(.example);
         apk.setKeyStore(key_store_file);
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
         apk.addResourceDirectory(b.path("android/res"));
