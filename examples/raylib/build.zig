@@ -14,12 +14,12 @@ pub fn build(b: *std.Build) void {
     else
         android_targets;
 
-    const android_apk: ?*android.APK = blk: {
+    const android_apk: ?*android.Apk = blk: {
         if (android_targets.len == 0) {
             break :blk null;
         }
         const android_tools = android.Tools.create(b, .{});
-        const apk = android.APK.create(b, android_tools, .{
+        const apk = android.Apk.create(b, android_tools, .{
             .api_level = .android10,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",

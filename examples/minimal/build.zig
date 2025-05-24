@@ -15,12 +15,11 @@ pub fn build(b: *std.Build) void {
         android_targets;
 
     // If building with Android, initialize the tools / build
-    const android_apk: ?*android.APK = blk: {
-        if (android_targets.len == 0) {
-            break :blk null;
-        }
+    const android_apk: ?*android.Apk = blk: {
+        if (android_targets.len == 0) break :blk null;
+
         const android_tools = android.Tools.create(b, .{});
-        const apk = android.APK.create(b, android_tools, .{
+        const apk = android.Apk.create(b, android_tools, .{
             .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
@@ -62,7 +61,7 @@ pub fn build(b: *std.Build) void {
         // NOTE: Android has different CPU targets so you need to build a version of your
         //       code for x86, x86_64, arm, arm64 and more
         if (target.result.abi.isAndroid()) {
-            const apk: *android.APK = android_apk orelse @panic("Android APK should be initialized");
+            const apk: *android.Apk = android_apk orelse @panic("Android APK should be initialized");
             const android_dep = b.dependency("android", .{
                 .optimize = optimize,
                 .target = target,
