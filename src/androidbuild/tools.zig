@@ -24,8 +24,12 @@ b: *Build,
 
 /// On most platforms this will map to the $ANDROID_HOME environment variable
 android_sdk_path: []const u8,
-// $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
+/// $JDK_HOME, $JAVA_HOME or auto-discovered from java binaries found in $PATH
 jdk_path: []const u8,
+/// ie. $ANDROID_HOME/platform-tools
+platform_tools: struct {
+    adb: []const u8,
+},
 /// ie. $ANDROID_HOME/cmdline_tools/bin or $ANDROID_HOME/tools/bin
 ///
 /// Available to download at: https://developer.android.com/studio#command-line-tools-only
@@ -141,6 +145,8 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
         printErrorsAndExit("unable to find required Android installation", errors.items);
     }
 
+    const platform_tools_path = b.pathResolve(&[_][]const u8{ android_sdk_path, "platform-tools" });
+
     const exe_suffix = if (host_os_tag == .windows) ".exe" else "";
     const bat_suffix = if (host_os_tag == .windows) ".bat" else "";
 
@@ -149,6 +155,11 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
         .b = b,
         .android_sdk_path = android_sdk_path,
         .jdk_path = jdk_path,
+        .platform_tools = .{
+            .adb = b.pathResolve(&[_][]const u8{
+                platform_tools_path, b.fmt("adb{s}", .{exe_suffix}),
+            }),
+        },
         .cmdline_tools = .{
             .lint = b.pathResolve(&[_][]const u8{
                 cmdline_tools_path, b.fmt("lint{s}", .{bat_suffix}),
@@ -179,6 +190,45 @@ pub fn createApk(sdk: *Sdk, options: Apk.Options) *Apk {
 // TODO: Consider adding step to run: sdkmanager --install "ndk;21.3.6528147"
 // pub fn installNdkVersion(ndk_version: []const u8) *Step {
 // }
+
+/// Start an installed application on your Android device or emulator.
+/// To install an APK first see "addAdbInstall"
+///
+/// ie.
+/// - "adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity"
+/// - "adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity"
+pub fn addAdbStart(sdk: *Sdk, package_name_and_java_entry: []const u8) *Step.Run {
+    const b = sdk.b;
+    if (sdk.platform_tools.adb.len == 0) {
+        @panic("Cannot call addAdbStart as 'adb' is not installed");
+    }
+    // TODO: Improve this to be its own special Step that can auto-detect the "com.zig.sdl2/com.zig.sdl2.ZigSDLActivity" data
+    const adb_shell_start = b.addSystemCommand(&.{ sdk.platform_tools.adb, "shell", "am", "start", "-S", "-W", "-n", package_name_and_java_entry });
+    return adb_shell_start;
+}
+
+/// Install an APK onto your Android device or emulator
+/// ie. "adb install ./zig-out/bin/minimal.apk"
+pub fn adbInstall(sdk: *Sdk, apk: LazyPath) void {
+    const b = sdk.b;
+    const adb_install = sdk.addAdbInstall(apk);
+    b.getInstallStep().dependOn(&adb_install.step);
+}
+
+/// Install an APK onto your Android device or emulator
+/// ie. "adb install ./zig-out/bin/minimal.apk"
+pub fn addAdbInstall(sdk: *Sdk, apk: LazyPath) *Step.Run {
+    const b = sdk.b;
+    if (sdk.platform_tools.adb.len == 0) {
+        @panic("Cannot call addInstallApk as 'adb' is not installed");
+    }
+    const adb_install = b.addSystemCommand(&.{
+        sdk.platform_tools.adb,
+        "install",
+    });
+    adb_install.addFileArg(apk);
+    return adb_install;
+}
 
 /// EXPERIMENTAL: Allows invoking the Android SDK manager
 /// ie. zig build -Dandroid sdkmanager -- --help
