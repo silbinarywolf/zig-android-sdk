@@ -15,11 +15,10 @@ pub fn build(b: *std.Build) void {
     else
         android_targets;
 
-    const android_sdk = android.Sdk.create(b, .{});
     const android_apk: ?*android.Apk = blk: {
-        if (android_targets.len == 0) {
-            break :blk null;
-        }
+        if (android_targets.len == 0) break :blk null;
+
+        const android_sdk = android.Sdk.create(b, .{});
         const apk = android_sdk.createApk(.{
             .api_level = .android15,
             .build_tools_version = "35.0.1",
@@ -135,6 +134,7 @@ pub fn build(b: *std.Build) void {
         const installed_apk = apk.addInstallApk();
         b.getInstallStep().dependOn(&installed_apk.step);
 
+        const android_sdk = apk.sdk;
         const run_step = b.step("run", "Install and run the application on an Android device");
         const adb_install = android_sdk.addAdbInstall(installed_apk.source);
         const adb_start = android_sdk.addAdbStart("com.zig.sdl2/com.zig.sdl2.ZigSDLActivity");

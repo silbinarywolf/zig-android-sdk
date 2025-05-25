@@ -320,8 +320,8 @@ pub fn createKeyStore(sdk: *const Sdk, options: CreateKey) KeyStore {
     };
 }
 
-pub fn createOrGetLibCFile(tools: *Sdk, compile: *Step.Compile, android_api_level: ApiLevel, ndk_sysroot_path: []const u8, ndk_version: []const u8) LazyPath {
-    const b = tools.b;
+pub fn createOrGetLibCFile(sdk: *Sdk, compile: *Step.Compile, android_api_level: ApiLevel, ndk_sysroot_path: []const u8, ndk_version: []const u8) LazyPath {
+    const b = sdk.b;
 
     const target: ResolvedTarget = compile.root_module.resolved_target orelse @panic("no 'target' set on Android module");
     const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));

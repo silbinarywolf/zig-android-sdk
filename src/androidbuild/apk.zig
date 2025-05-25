@@ -1,13 +1,13 @@
 const std = @import("std");
 const androidbuild = @import("androidbuild.zig");
-const Tools = @import("tools.zig");
+const Sdk = @import("tools.zig");
 const BuiltinOptionsUpdate = @import("builtin_options_update.zig");
 
 const Ndk = @import("Ndk.zig");
 const BuildTools = @import("BuildTools.zig");
 const D8Glob = @import("d8glob.zig");
 
-const KeyStore = Tools.KeyStore;
+const KeyStore = Sdk.KeyStore;
 const ApiLevel = androidbuild.ApiLevel;
 const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
@@ -32,7 +32,7 @@ pub const Resource = union(enum) {
 };
 
 b: *std.Build,
-tools: *Tools,
+sdk: *Sdk,
 /// Path to Native Development Kit, this includes various C-code headers, libraries, and more.
 /// ie. $ANDROID_HOME/ndk/29.0.13113456
 ndk: Ndk,
@@ -57,17 +57,17 @@ pub const Options = struct {
     api_level: ApiLevel,
 };
 
-pub fn create(tools: *Tools, options: Options) *Apk {
-    const b = tools.b;
+pub fn create(sdk: *Sdk, options: Options) *Apk {
+    const b = sdk.b;
 
     var errors = std.ArrayList([]const u8).init(b.allocator);
     defer errors.deinit();
 
-    const build_tools = BuildTools.init(b, tools.android_sdk_path, options.build_tools_version, &errors) catch |err| switch (err) {
+    const build_tools = BuildTools.init(b, sdk.android_sdk_path, options.build_tools_version, &errors) catch |err| switch (err) {
         error.BuildToolFailed => BuildTools.empty, // fallthruogh and print all errors below
         error.OutOfMemory => @panic("OOM"),
     };
-    const ndk = Ndk.init(b, tools.android_sdk_path, options.ndk_version, &errors) catch |err| switch (err) {
+    const ndk = Ndk.init(b, sdk.android_sdk_path, options.ndk_version, &errors) catch |err| switch (err) {
         error.NdkFailed => Ndk.empty, // fallthrough and print all errors below
         error.OutOfMemory => @panic("OOM"),
     };
@@ -79,7 +79,7 @@ pub fn create(tools: *Tools, options: Options) *Apk {
     const apk: *Apk = b.allocator.create(Apk) catch @panic("OOM");
     apk.* = .{
         .b = b,
-        .tools = tools,
+        .sdk = sdk,
         .ndk = ndk,
         .build_tools = build_tools,
         .api_level = options.api_level,
@@ -180,7 +180,7 @@ fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
     // ie. $ANDROID_HOME/ndk/{ndk_version}/sources/android/cpufeatures
     if (target.result.cpu.arch == .arm) {
         module.addIncludePath(.{
-            .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.tools.android_sdk_path, apk.ndk.version }),
+            .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.sdk.android_sdk_path, apk.ndk.version }),
         });
     }
 
@@ -281,7 +281,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
 
     // ie. "$ANDROID_HOME/Sdk/platforms/android-{api_level}/android.jar"
     const root_jar = b.pathResolve(&[_][]const u8{
-        apk.tools.android_sdk_path,
+        apk.sdk.android_sdk_path,
         "platforms",
         b.fmt("android-{d}", .{@intFromEnum(apk.api_level)}),
         "android.jar",
@@ -503,7 +503,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     if (apk.java_files.items.len > 0) {
         // https://docs.oracle.com/en/java/javase/17/docs/specs/man/javac.html
         const javac_cmd = b.addSystemCommand(&[_][]const u8{
-            apk.tools.java_tools.javac,
+            apk.sdk.java_tools.javac,
             // NOTE(jae): 2024-09-22
             // Force encoding to be "utf8", this fixes the following error occuring in Windows:
             // error: unmappable character (0x8F) for encoding windows-1252
@@ -557,7 +557,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // See: https://musteresel.github.io/posts/2019/07/build-android-app-bundle-on-command-line.html
     {
         const jar = b.addSystemCommand(&[_][]const u8{
-            apk.tools.java_tools.jar,
+            apk.sdk.java_tools.jar,
         });
         jar.setName(runNameContext("jar (unzip resources.apk)"));
         if (b.verbose) {
@@ -601,7 +601,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // - {directory with all resource files like: AndroidManifest.xml, res/values/strings.xml}
     const zip_file: LazyPath = blk: {
         const jar = b.addSystemCommand(&[_][]const u8{
-            apk.tools.java_tools.jar,
+            apk.sdk.java_tools.jar,
         });
         jar.setName(runNameContext("jar (zip compress apk)"));
 
@@ -628,7 +628,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     // Update zip with files that are not compressed (ie. resources.arsc)
     const update_zip: *Step = blk: {
         const jar = b.addSystemCommand(&[_][]const u8{
-            apk.tools.java_tools.jar,
+            apk.sdk.java_tools.jar,
         });
         jar.setName(runNameContext("jar (update zip with uncompressed files)"));
 
@@ -723,7 +723,7 @@ fn getSystemIncludePath(apk: *Apk, target: ResolvedTarget) []const u8 {
 }
 
 fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
-    const tools = apk.tools;
+    const tools = apk.sdk;
     const android_libc_path = tools.createOrGetLibCFile(compile, apk.api_level, apk.ndk.sysroot_path, apk.ndk.version);
     android_libc_path.addStepDependencies(&compile.step);
     compile.setLibCFile(android_libc_path);
