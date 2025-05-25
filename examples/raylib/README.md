@@ -7,6 +7,13 @@ ld.lld: warning: <path-to-project>/.zig-cache/o/4227869d730f094811a7cdaaab535797
 ```
 You can ignore this error for now.
 
+### Build and run natively on your operating system or install/run on Android device
+
+```sh
+zig build run           # Native
+zig build run -Dandroid # Android
+```
+
 ### Build, install to test one target against a local emulator and run
 
 ```sh
@@ -18,14 +25,8 @@ adb shell am start -S -W -n com.zig.raylib/android.app.NativeActivity
 ### Build and install for all supported Android targets
 
 ```sh
-zig build -Dandroid=true
+zig build -Dandroid
 adb install ./zig-out/bin/raylib.apk
-```
-
-### Build and run natively on your operating system
-
-```sh
-zig build run
 ```
 
 ### Uninstall your application

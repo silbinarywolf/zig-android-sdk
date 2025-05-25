@@ -19,16 +19,13 @@ options: *Options,
 package_name_stdout: LazyPath,
 
 pub fn create(owner: *std.Build, options: *Options, package_name_stdout: LazyPath) void {
-    const builtin_options_update = owner.allocator.create(@This()) catch @panic("OOM");
+    const builtin_options_update = owner.allocator.create(BuiltinOptionsUpdate) catch @panic("OOM");
     builtin_options_update.* = .{
         .step = Step.init(.{
             .id = base_id,
             .name = androidbuild.runNameContext("builtin_options_update"),
             .owner = owner,
-            .makeFn = comptime if (std.mem.eql(u8, builtin.zig_version_string, "0.13.0"))
-                make013
-            else
-                makeLatest,
+            .makeFn = make,
         }),
         .options = options,
         .package_name_stdout = package_name_stdout,
@@ -39,21 +36,9 @@ pub fn create(owner: *std.Build, options: *Options, package_name_stdout: LazyPat
     package_name_stdout.addStepDependencies(&builtin_options_update.step);
 }
 
-/// make for zig 0.13.0
-fn make013(step: *Step, prog_node: std.Progress.Node) !void {
-    _ = prog_node; // autofix
-    try make(step);
-}
-
-/// make for zig 0.14.0+
-fn makeLatest(step: *Step, options: Build.Step.MakeOptions) !void {
-    _ = options; // autofix
-    try make(step);
-}
-
-fn make(step: *Step) !void {
+fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const b = step.owner;
-    const builtin_options_update: *@This() = @fieldParentPtr("step", step);
+    const builtin_options_update: *BuiltinOptionsUpdate = @fieldParentPtr("step", step);
     const options = builtin_options_update.options;
 
     const package_name_path = builtin_options_update.package_name_stdout.getPath2(b, step);
