@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
+const Allocator = std.mem.Allocator;
 
 /// Used for reading install locations from the registry
 const RegistryWtf8 = @import("WindowsSdk.zig").RegistryWtf8;
@@ -378,24 +379,24 @@ pub fn createOrGetLibCFile(tools: *Sdk, compile: *Step.Compile, android_api_leve
 
 /// Search JDK_HOME, and then JAVA_HOME
 fn getJDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
-    const jdkHome = std.process.getEnvVarOwned(allocator, "JDK_HOME") catch |err| switch (err) {
+    const jdk_home = std.process.getEnvVarOwned(allocator, "JDK_HOME") catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.EnvironmentVariableNotFound => &[0]u8{},
         // Windows-only
         error.InvalidWtf8 => @panic("JDK_HOME environment variable is invalid UTF-8"),
     };
-    if (jdkHome.len > 0) {
-        return jdkHome;
+    if (jdk_home.len > 0) {
+        return jdk_home;
     }
 
-    const javaHome = std.process.getEnvVarOwned(allocator, "JAVA_HOME") catch |err| switch (err) {
+    const java_home = std.process.getEnvVarOwned(allocator, "JAVA_HOME") catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.EnvironmentVariableNotFound => &[0]u8{},
         // Windows-only
         error.InvalidWtf8 => @panic("JAVA_HOME environment variable is invalid UTF-8"),
     };
-    if (javaHome.len > 0) {
-        return javaHome;
+    if (java_home.len > 0) {
+        return java_home;
     }
 
     return &[0]u8{};
@@ -403,14 +404,14 @@ fn getJDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
 
 /// Caller must free returned memory
 fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
-    const androidHome = std.process.getEnvVarOwned(allocator, "ANDROID_HOME") catch |err| switch (err) {
+    const android_home = std.process.getEnvVarOwned(allocator, "ANDROID_HOME") catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.EnvironmentVariableNotFound => &[0]u8{},
         // Windows-only
         error.InvalidWtf8 => @panic("ANDROID_HOME environment variable is invalid UTF-8"),
     };
-    if (androidHome.len > 0) {
-        return androidHome;
+    if (android_home.len > 0) {
+        return android_home;
     }
 
     // Check for Android Studio
@@ -567,8 +568,8 @@ const PathSearch = struct {
 
         // setup binaries to search for
         const exe_suffix = if (host_os_tag == .windows) ".exe" else "";
-        const adb = std.mem.concat(allocator, u8, &.{ "adb", exe_suffix }) catch |err| return err;
-        const jarsigner = std.mem.concat(allocator, u8, &.{ "jarsigner", exe_suffix }) catch |err| return err;
+        const adb = try std.mem.concat(allocator, u8, &.{ "adb", exe_suffix });
+        const jarsigner = try std.mem.concat(allocator, u8, &.{ "jarsigner", exe_suffix });
 
         const path_it = std.mem.splitScalar(u8, path_env, ';');
         return .{
@@ -586,7 +587,7 @@ const PathSearch = struct {
     }
 
     /// Get the Android SDK Path, the caller owns the memory
-    pub fn findAndroidSDK(self: *PathSearch, allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
+    pub fn findAndroidSDK(self: *PathSearch, allocator: std.mem.Allocator) Allocator.Error![]const u8 {
         if (self.android_sdk_path == null) {
             // Iterate over PATH environment folders until we either hit the end or the Android SDK folder
             try self.getNext(.androidsdk);
@@ -598,7 +599,7 @@ const PathSearch = struct {
     }
 
     /// Get the JDK Path, the caller owns the memory
-    pub fn findJDK(self: *PathSearch, allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
+    pub fn findJDK(self: *PathSearch, allocator: std.mem.Allocator) Allocator.Error![]const u8 {
         if (self.jdk_path == null) {
             // Iterate over PATH environment folders until we either hit the end or the Android SDK folder
             try self.getNext(.jdk);
@@ -614,7 +615,7 @@ const PathSearch = struct {
         jdk,
     };
 
-    fn getNext(self: *PathSearch, path: PathType) error{OutOfMemory}!void {
+    fn getNext(self: *PathSearch, path: PathType) Allocator.Error!void {
         const allocator = self.allocator;
         while (self.path_it.next()) |path_item| {
             if (path_item.len == 0) continue;

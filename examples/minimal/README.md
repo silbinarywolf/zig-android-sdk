@@ -2,6 +2,13 @@
 
 As of 2024-09-19, this is a thrown together, very quick copy-paste of the minimal example from the original [ZigAndroidTemplate](https://github.com/ikskuh/ZigAndroidTemplate/blob/master/examples/minimal/main.zig) repository.
 
+### Build and run natively on your operating system or install/run on Android device
+
+```sh
+zig build run           # Native
+zig build run -Dandroid # Android
+```
+
 ### Build, install to test one target against a local emulator and run
 
 ```sh
@@ -13,7 +20,7 @@ adb shell am start -S -W -n com.zig.minimal/android.app.NativeActivity
 ### Build and install for all supported Android targets
 
 ```sh
-zig build -Dandroid=true
+zig build -Dandroid
 adb install ./zig-out/bin/minimal.apk
 ```
 
