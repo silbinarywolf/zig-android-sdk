@@ -14,19 +14,16 @@ pub fn build(b: *std.Build) void {
     else
         android_targets;
 
-    // If building with Android, initialize the tools / build
-    const android_apk: ?*android.APK = blk: {
-        if (android_targets.len == 0) {
-            break :blk null;
-        }
-        const android_tools = android.Tools.create(b, .{
+    const android_apk: ?*android.Apk = blk: {
+        if (android_targets.len == 0) break :blk null;
+
+        const android_sdk = android.Sdk.create(b, .{});
+        const apk = android_sdk.createApk(.{
             .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
         });
-        const apk = android.APK.create(b, android_tools);
-
-        const key_store_file = android_tools.createKeyStore(android.CreateKey.example());
+        const key_store_file = android_sdk.createKeyStore(.example);
         apk.setKeyStore(key_store_file);
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
         apk.addResourceDirectory(b.path("android/res"));
@@ -62,7 +59,7 @@ pub fn build(b: *std.Build) void {
         // NOTE: Android has different CPU targets so you need to build a version of your
         //       code for x86, x86_64, arm, arm64 and more
         if (target.result.abi.isAndroid()) {
-            const apk: *android.APK = android_apk orelse @panic("Android APK should be initialized");
+            const apk: *android.Apk = android_apk orelse @panic("Android APK should be initialized");
             const android_dep = b.dependency("android", .{
                 .optimize = optimize,
                 .target = target,
@@ -82,6 +79,14 @@ pub fn build(b: *std.Build) void {
         }
     }
     if (android_apk) |apk| {
-        apk.installApk();
+        const installed_apk = apk.addInstallApk();
+        b.getInstallStep().dependOn(&installed_apk.step);
+
+        const android_sdk = apk.sdk;
+        const run_step = b.step("run", "Install and run the application on an Android device");
+        const adb_install = android_sdk.addAdbInstall(installed_apk.source);
+        const adb_start = android_sdk.addAdbStart("com.zig.minimal/android.app.NativeActivity");
+        adb_start.step.dependOn(&adb_install.step);
+        run_step.dependOn(&adb_start.step);
     }
 }

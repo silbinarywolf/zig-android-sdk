@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: "ubuntu-22.04"
+          - os: "ubuntu-latest"
           - os: "windows-latest"
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
 
@@ -45,7 +45,7 @@ jobs:
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
       # see: https://ziglang.org/news/migrate-to-self-hosting/
-      uses: mlugg/setup-zig@v1
+      uses: mlugg/setup-zig@v2
       with:
         version: "0.14.0"
 
@@ -99,7 +99,7 @@ jobs:
     #
 
     - name: Setup Zig Nightly
-      uses: mlugg/setup-zig@v1
+      uses: mlugg/setup-zig@v2
       with:
         version: "master"
 

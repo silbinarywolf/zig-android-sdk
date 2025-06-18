@@ -11,7 +11,8 @@ const log = std.log.scoped(.@"zig-android-sdk");
 ///
 /// https://en.wikipedia.org/wiki/Android_version_history
 /// https://apilevels.com/
-pub const APILevel = enum(u32) {
+pub const ApiLevel = enum(u32) {
+    none = 0,
     /// KitKat (2013)
     /// Android 4.4 = 19
     android4_4 = 19,
@@ -41,11 +42,6 @@ pub const APILevel = enum(u32) {
     android16 = 36,
     // allow custom overrides (incase this library is not up to date with the latest android version)
     _,
-};
-
-pub const KeyStore = struct {
-    file: LazyPath,
-    password: []const u8,
 };
 
 pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]const u8 {

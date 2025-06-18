@@ -18,8 +18,12 @@ zig build -Dandroid=true
 const android = @import("android");
 
 pub fn build(b: *std.Build) !void {
-    const android_tools = android.Tools.create(b, ...);
-    const apk = android.APK.create(b, android_tools);
+    const android_sdk = android.Sdk.create(b, .{});
+    const apk = android_sdk.createApk(.{
+        .api_level = .android15,
+        .build_tools_version = "35.0.1",
+        .ndk_version = "29.0.13113456",
+    });
     apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
     apk.addResourceDirectory(b.path("android/res"));
     apk.addJavaSourceFile(.{ .file = b.path("android/src/NativeInvocationHandler.java") });
