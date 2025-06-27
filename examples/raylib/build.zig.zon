@@ -4,11 +4,11 @@
     .minimum_zig_version = "0.14.0",
     .fingerprint = 0x13035e5cf42e313f,
     .dependencies = .{
-        .raylib_zig = .{ 
-            .url = "git+https://github.com/lumenkeyes/raylib-zig#b00d4c2b973665e3a88c2565b6cd63c56d0173c2",
-            .hash = "raylib_zig-5.6.0-dev-KE8REPwqBQC35iWa2sFblBUNWkTlEi1gjit9dtyOLu_b"
-        },
         .android = .{ .path = "../.." },
+        .raylib_zig = .{
+            .url = "git+https://github.com/not-nik/raylib-zig#5013830647196ba938a3a25a36b8245606e9a9cd",
+            .hash = "raylib_zig-5.6.0-dev-KE8REM0tBQAHVn9Xjqlgu9l1qgfTmP8aJa1kLhD584bV",
+        },
     },
     .paths = .{
         "build.zig",
