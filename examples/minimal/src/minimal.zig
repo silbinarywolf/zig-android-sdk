@@ -37,7 +37,7 @@ fn nativeActivityOnCreate(activity: *androidbind.ANativeActivity, savedState: []
         \\  App pid:          {}
         \\  Build mode:       {s}
         \\  ABI:              {s}-{s}-{s}
-        \\  Compiler version: {}
+        \\  Compiler version: {}.{}.{}
         \\  Compiler backend: {s}
     , .{
         "Minimal App", // build_options.app_name,
@@ -48,7 +48,9 @@ fn nativeActivityOnCreate(activity: *androidbind.ANativeActivity, savedState: []
         @tagName(builtin.cpu.arch),
         @tagName(builtin.os.tag),
         @tagName(builtin.abi),
-        builtin.zig_version,
+        builtin.zig_version.major,
+        builtin.zig_version.minor,
+        builtin.zig_version.patch,
         @tagName(builtin.zig_backend),
     });
 
