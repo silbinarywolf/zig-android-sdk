@@ -786,7 +786,7 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
     const b = apk.b;
 
     const should_apply_fix = (artifact.root_module.link_libcpp == true or
-        artifact.dependsOnSystemLibrary("c++abi_zig_workaround"));
+        dependsOnSystemLibrary(artifact, "c++abi_zig_workaround"));
     if (!should_apply_fix) {
         return;
     }
@@ -819,6 +819,22 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
         // so we link the "unwind" library
         artifact.root_module.linkSystemLibrary("unwind", .{});
     }
+}
+
+/// Copy-paste of "dependsOnSystemLibrary" that only checks if that system library is included to
+/// workaround a bug with in Zig 0.15.0-dev.1092+d772c0627
+fn dependsOnSystemLibrary(compile: *Step.Compile, name: []const u8) bool {
+    for (compile.getCompileDependencies(true)) |some_compile| {
+        for (some_compile.root_module.getGraph().modules) |mod| {
+            for (mod.link_objects.items) |lo| {
+                switch (lo) {
+                    .system_lib => |lib| if (std.mem.eql(u8, lib.name, name)) return true,
+                    else => {},
+                }
+            }
+        }
+    }
+    return false;
 }
 
 fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {

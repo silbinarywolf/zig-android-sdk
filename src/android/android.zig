@@ -103,7 +103,10 @@ const LogWriter = struct {
     line_len: usize = 0,
 
     const Error = error{};
-    const Writer = std.io.Writer(*@This(), Error, write);
+    const Writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14)
+        std.io.Writer(*@This(), Error, write)
+    else
+        std.io.GenericWriter(*@This(), Error, write);
 
     fn write(self: *@This(), buffer: []const u8) Error!usize {
         for (buffer) |char| {
@@ -168,8 +171,11 @@ const Panic = struct {
     /// This is used to catch and handle panics triggered by the panic handler.
     threadlocal var panic_stage: usize = 0;
 
+    const is_zig_014_or_less = (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14);
+
     fn panic(message: []const u8, ret_addr: ?usize) noreturn {
         @branchHint(.cold);
+        if (!is_zig_014_or_less) @compileError("Android Panic needs to be updated to the newer io.Writer vtable implementation to work in Zig 0.15.0+");
         if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
         const first_trace_addr = ret_addr orelse @returnAddress();
         panicImpl(first_trace_addr, message);
@@ -223,12 +229,6 @@ const Panic = struct {
     }
 
     const io = struct {
-        const tty = struct {
-            inline fn detectConfig(_: *LogWriter) std.io.tty.Config {
-                return .no_color;
-            }
-        };
-
         var writer = LogWriter{
             .level = .fatal,
         };
@@ -307,14 +307,13 @@ const Panic = struct {
 
     fn dumpStackTrace(stack_trace: std.builtin.StackTrace) void {
         nosuspend {
+            const stderr = io.getStdErr().writer();
             if (comptime builtin.target.cpu.arch.isWasm()) {
                 if (native_os == .wasi) {
-                    const stderr = io.getStdErr().writer();
                     stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
                 }
                 return;
             }
-            const stderr = io.getStdErr().writer();
             if (builtin.strip_debug_info) {
                 stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
                 return;
@@ -325,13 +324,13 @@ const Panic = struct {
             };
             if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13) {
                 // Legacy 0.13.0
-                writeStackTrace(stack_trace, stderr, getDebugInfoAllocator(), debug_info, io.tty.detectConfig(io.getStdErr())) catch |err| {
+                writeStackTrace(stack_trace, stderr, getDebugInfoAllocator(), debug_info, .no_color) catch |err| {
                     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
                     return;
                 };
             } else {
                 // 0.14.0-dev+
-                writeStackTrace(stack_trace, stderr, debug_info, io.tty.detectConfig(io.getStdErr())) catch |err| {
+                writeStackTrace(stack_trace, stderr, debug_info, .no_color) catch |err| {
                     stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
                     return;
                 };
@@ -342,14 +341,13 @@ const Panic = struct {
     const writeCurrentStackTrace = std.debug.writeCurrentStackTrace;
     fn dumpCurrentStackTrace(start_addr: ?usize) void {
         nosuspend {
+            const stderr = io.getStdErr().writer();
             if (comptime builtin.target.cpu.arch.isWasm()) {
                 if (native_os == .wasi) {
-                    const stderr = io.getStdErr().writer();
                     stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
                 }
                 return;
             }
-            const stderr = io.getStdErr().writer();
             if (builtin.strip_debug_info) {
                 stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
                 return;
@@ -358,7 +356,7 @@ const Panic = struct {
                 stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
                 return;
             };
-            writeCurrentStackTrace(stderr, debug_info, io.tty.detectConfig(io.getStdErr()), start_addr) catch |err| {
+            writeCurrentStackTrace(stderr, debug_info, .no_color, start_addr) catch |err| {
                 stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
                 return;
             };

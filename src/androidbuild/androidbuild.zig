@@ -100,7 +100,10 @@ pub fn runNameContext(comptime name: []const u8) []const u8 {
 pub fn printErrorsAndExit(message: []const u8, errors: []const []const u8) noreturn {
     nosuspend {
         log.err("{s}", .{message});
-        const stderr = std.io.getStdErr().writer();
+        const stderr = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+            std.io.getStdErr().writer()
+        else
+            std.fs.File.stderr();
         std.debug.lockStdErr();
         defer std.debug.unlockStdErr();
         for (errors) |err| {
@@ -108,14 +111,14 @@ pub fn printErrorsAndExit(message: []const u8, errors: []const []const u8) noret
             const headline = it.next() orelse continue;
             stderr.writeAll("- ") catch {};
             stderr.writeAll(headline) catch {};
-            stderr.writeByte('\n') catch {};
+            stderr.writeAll("\n") catch {};
             while (it.next()) |line| {
                 stderr.writeAll("  ") catch {};
                 stderr.writeAll(line) catch {};
-                stderr.writeByte('\n') catch {};
+                stderr.writeAll("\n") catch {};
             }
         }
-        stderr.writeByte('\n') catch {};
+        stderr.writeAll("\n") catch {};
     }
     std.process.exit(1);
 }

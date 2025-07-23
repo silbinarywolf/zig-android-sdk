@@ -10,16 +10,14 @@ pub fn build(b: *std.Build) !void {
     const sdl_include_path = sdl_path.path(b, "include");
 
     const is_shared_library = target.result.abi.isAndroid(); // NOTE(jae): 2024-09-22: Android uses shared library as SDL2 loads it as part of SDLActivity.java
-    const lib = if (!is_shared_library) b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "SDL2",
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    }) else b.addSharedLibrary(.{
-        .name = "SDL2",
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        }),
+        .linkage = if (is_shared_library) .dynamic else .static,
     });
 
     lib.addCSourceFiles(.{

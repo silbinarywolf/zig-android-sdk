@@ -27,7 +27,7 @@ comptime {
 }
 
 /// This needs to be exported for Android builds
-fn SDL_main() callconv(.C) void {
+fn SDL_main() callconv(.c) void {
     if (comptime builtin.abi.isAndroid()) {
         _ = std.start.callMain();
     } else {

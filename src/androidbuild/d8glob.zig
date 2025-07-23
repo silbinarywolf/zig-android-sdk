@@ -48,7 +48,7 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const glob: *@This() = @fieldParentPtr("step", step);
     const d8 = glob.run;
 
-    const search_dir = glob.dir.getPath2(b, step);
+    const search_dir = glob.dir.getPath3(b, step);
 
     // NOTE(jae): 2024-09-22
     // Change current working directory to where the Java classes are
@@ -62,8 +62,11 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     // - If "d8" has the ability to pass a file of command line parameters, that would work too but I haven't seen any in the docs
     d8.setCwd(glob.dir);
 
-    var dir = try fs.openDirAbsolute(search_dir, .{ .iterate = true });
+    // NOTE(jae): 2025-07-23
+    // As of Zig 0.15.0-dev.1092+d772c0627, package_name_path.openDir("") is not possible as it assumes you're appending a sub-path
+    var dir = try search_dir.root_dir.handle.openDir(search_dir.sub_path, .{ .iterate = true });
     defer dir.close();
+
     var walker = try dir.walk(arena);
     defer walker.deinit();
     while (try walker.next()) |entry| {
@@ -83,7 +86,7 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
             // This is to avoid the Java error "command line too long" that can occur with d8
             d8.addArg(entry.path);
             d8.addFileInput(LazyPath{
-                .cwd_relative = try fs.path.resolve(arena, &.{ search_dir, entry.path }),
+                .cwd_relative = try search_dir.root_dir.join(b.allocator, &.{ search_dir.sub_path, entry.path }),
             });
         }
     }
