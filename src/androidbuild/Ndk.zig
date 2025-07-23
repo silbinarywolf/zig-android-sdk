@@ -112,13 +112,9 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
 }
 
 pub fn validateApiLevel(ndk: *const Ndk, b: *std.Build, api_level: ApiLevel, errors: *std.ArrayList([]const u8)) void {
-    // Get root jar path
-    const root_jar = b.pathResolve(&[_][]const u8{
-        ndk.android_sdk_path,
-        "platforms",
-        b.fmt("android-{d}", .{@intFromEnum(api_level)}),
-        "android.jar",
-    });
+    if (ndk.android_sdk_path.len == 0 or ndk.sysroot_path.len == 0) {
+        @panic("Should not call validateApiLevel if NDK path is not set");
+    }
 
     // Check if NDK sysroot/usr/lib/{target}/{api_level} path is accessible
     _ = blk: {
@@ -151,6 +147,13 @@ pub fn validateApiLevel(ndk: *const Ndk, b: *std.Build, api_level: ApiLevel, err
 
     // Check if platforms/android-{api-level}/android.jar exists
     _ = blk: {
+        // Get root jar path
+        const root_jar = b.pathResolve(&[_][]const u8{
+            ndk.android_sdk_path,
+            "platforms",
+            b.fmt("android-{d}", .{@intFromEnum(api_level)}),
+            "android.jar",
+        });
         std.fs.accessAbsolute(root_jar, .{}) catch |err| switch (err) {
             error.FileNotFound => {
                 const message = b.fmt("Android API level {d} not installed. Unable to find '{s}'", .{
