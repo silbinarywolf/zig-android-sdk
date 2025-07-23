@@ -71,7 +71,11 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
         error.NdkFailed => Ndk.empty, // fallthrough and print all errors below
         error.OutOfMemory => @panic("OOM"),
     };
-    ndk.validateApiLevel(b, options.api_level, &errors);
+    if (ndk.path.len != 0) {
+        // Only do additional NDK validation if ndk is not set to Ndk.empty
+        // ie. "ndk_version" isn't installed
+        ndk.validateApiLevel(b, options.api_level, &errors);
+    }
     if (errors.items.len > 0) {
         printErrorsAndExit("unable to find required Android installation", errors.items);
     }
