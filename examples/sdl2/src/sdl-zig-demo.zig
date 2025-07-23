@@ -14,11 +14,11 @@ pub const std_options: std.Options = if (builtin.abi.isAndroid())
 else
     .{};
 
-// custom panic handler for Android
-// pub const panic = if (builtin.abi.isAndroid())
-//     android.panic
-// else
-//     std.debug.FullPanic(std.debug.defaultPanic);
+/// custom panic handler for Android
+pub const panic = if (builtin.abi.isAndroid())
+    android.panic
+else
+    std.debug.FullPanic(std.debug.defaultPanic);
 
 comptime {
     if (builtin.abi.isAndroid()) {
