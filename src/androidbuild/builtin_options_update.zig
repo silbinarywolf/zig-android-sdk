@@ -41,9 +41,11 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const builtin_options_update: *BuiltinOptionsUpdate = @fieldParentPtr("step", step);
     const options = builtin_options_update.options;
 
-    const package_name_path = builtin_options_update.package_name_stdout.getPath2(b, step);
+    const package_name_path = builtin_options_update.package_name_stdout.getPath3(b, step);
 
-    const file = try fs.openFileAbsolute(package_name_path, .{});
+    // NOTE(jae): 2025-07-23
+    // As of Zig 0.15.0-dev.1092+d772c0627, package_name_path.openFile("") is not possible as it assumes you're appending *something*
+    const file = try package_name_path.root_dir.handle.openFile(package_name_path.sub_path, .{});
 
     // Read package name from stdout and strip line feed / carriage return
     // ie. "com.zig.sdl2\n\r"

@@ -14,11 +14,11 @@ pub const std_options: std.Options = if (builtin.abi.isAndroid())
 else
     .{};
 
-/// custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid())
-    android.panic
-else
-    std.debug.FullPanic(std.debug.defaultPanic);
+// custom panic handler for Android
+// pub const panic = if (builtin.abi.isAndroid())
+//     android.panic
+// else
+//     std.debug.FullPanic(std.debug.defaultPanic);
 
 comptime {
     if (builtin.abi.isAndroid()) {
@@ -27,7 +27,7 @@ comptime {
 }
 
 /// This needs to be exported for Android builds
-fn SDL_main() callconv(.C) void {
+fn SDL_main() callconv(.c) void {
     if (comptime builtin.abi.isAndroid()) {
         _ = std.start.callMain();
     } else {

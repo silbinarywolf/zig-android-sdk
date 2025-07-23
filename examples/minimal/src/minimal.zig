@@ -81,7 +81,7 @@ comptime {
 }
 
 /// Android entry point
-fn NativeActivity_onCreate(activity: *androidbind.ANativeActivity, rawSavedState: ?[*]u8, rawSavedStateSize: usize) callconv(.C) void {
+fn NativeActivity_onCreate(activity: *androidbind.ANativeActivity, rawSavedState: ?[*]u8, rawSavedStateSize: usize) callconv(.c) void {
     const savedState: []const u8 = if (rawSavedState) |s|
         s[0..rawSavedStateSize]
     else
@@ -147,7 +147,7 @@ fn makeNativeActivityGlue(comptime App: type) androidbind.ANativeActivityCallbac
         }
 
         // return value must be created with malloc(), so we pass the c_allocator to App.onSaveInstanceState
-        fn onSaveInstanceState(activity: *androidbind.ANativeActivity, outSize: *usize) callconv(.C) ?[*]u8 {
+        fn onSaveInstanceState(activity: *androidbind.ANativeActivity, outSize: *usize) callconv(.c) ?[*]u8 {
             outSize.* = 0;
             if (!@hasDecl(App, "onSaveInstanceState")) {
                 log.debug("ANativeActivity callback onSaveInstanceState not available on {s}", .{@typeName(App)});
@@ -162,52 +162,52 @@ fn makeNativeActivityGlue(comptime App: type) androidbind.ANativeActivityCallbac
             return null;
         }
 
-        fn onDestroy(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onDestroy(activity: *androidbind.ANativeActivity) callconv(.c) void {
             const instance = activity.instance orelse return;
             const app: *App = @ptrCast(@alignCast(instance));
             app.deinit();
             std.heap.c_allocator.destroy(app);
         }
-        fn onStart(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onStart(activity: *androidbind.ANativeActivity) callconv(.c) void {
             invoke(activity, "onStart", .{});
         }
-        fn onResume(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onResume(activity: *androidbind.ANativeActivity) callconv(.c) void {
             invoke(activity, "onResume", .{});
         }
-        fn onPause(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onPause(activity: *androidbind.ANativeActivity) callconv(.c) void {
             invoke(activity, "onPause", .{});
         }
-        fn onStop(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onStop(activity: *androidbind.ANativeActivity) callconv(.c) void {
             invoke(activity, "onStop", .{});
         }
-        fn onConfigurationChanged(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onConfigurationChanged(activity: *androidbind.ANativeActivity) callconv(.c) void {
             invoke(activity, "onConfigurationChanged", .{});
         }
-        fn onLowMemory(activity: *androidbind.ANativeActivity) callconv(.C) void {
+        fn onLowMemory(activity: *androidbind.ANativeActivity) callconv(.c) void {
             invoke(activity, "onLowMemory", .{});
         }
-        fn onWindowFocusChanged(activity: *androidbind.ANativeActivity, hasFocus: c_int) callconv(.C) void {
+        fn onWindowFocusChanged(activity: *androidbind.ANativeActivity, hasFocus: c_int) callconv(.c) void {
             invoke(activity, "onWindowFocusChanged", .{(hasFocus != 0)});
         }
-        fn onNativeWindowCreated(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.C) void {
+        fn onNativeWindowCreated(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.c) void {
             invoke(activity, "onNativeWindowCreated", .{window});
         }
-        fn onNativeWindowResized(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.C) void {
+        fn onNativeWindowResized(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.c) void {
             invoke(activity, "onNativeWindowResized", .{window});
         }
-        fn onNativeWindowRedrawNeeded(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.C) void {
+        fn onNativeWindowRedrawNeeded(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.c) void {
             invoke(activity, "onNativeWindowRedrawNeeded", .{window});
         }
-        fn onNativeWindowDestroyed(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.C) void {
+        fn onNativeWindowDestroyed(activity: *androidbind.ANativeActivity, window: *androidbind.ANativeWindow) callconv(.c) void {
             invoke(activity, "onNativeWindowDestroyed", .{window});
         }
-        fn onInputQueueCreated(activity: *androidbind.ANativeActivity, input_queue: *androidbind.AInputQueue) callconv(.C) void {
+        fn onInputQueueCreated(activity: *androidbind.ANativeActivity, input_queue: *androidbind.AInputQueue) callconv(.c) void {
             invoke(activity, "onInputQueueCreated", .{input_queue});
         }
-        fn onInputQueueDestroyed(activity: *androidbind.ANativeActivity, input_queue: *androidbind.AInputQueue) callconv(.C) void {
+        fn onInputQueueDestroyed(activity: *androidbind.ANativeActivity, input_queue: *androidbind.AInputQueue) callconv(.c) void {
             invoke(activity, "onInputQueueDestroyed", .{input_queue});
         }
-        fn onContentRectChanged(activity: *androidbind.ANativeActivity, rect: *const androidbind.ARect) callconv(.C) void {
+        fn onContentRectChanged(activity: *androidbind.ANativeActivity, rect: *const androidbind.ARect) callconv(.c) void {
             invoke(activity, "onContentRectChanged", .{rect});
         }
     };

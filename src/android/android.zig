@@ -103,7 +103,10 @@ const LogWriter = struct {
     line_len: usize = 0,
 
     const Error = error{};
-    const Writer = std.io.Writer(*@This(), Error, write);
+    const Writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14)
+        std.io.Writer(*@This(), Error, write)
+    else
+        std.io.GenericWriter(*@This(), Error, write);
 
     fn write(self: *@This(), buffer: []const u8) Error!usize {
         for (buffer) |char| {
@@ -342,14 +345,16 @@ const Panic = struct {
     const writeCurrentStackTrace = std.debug.writeCurrentStackTrace;
     fn dumpCurrentStackTrace(start_addr: ?usize) void {
         nosuspend {
+            const stderr = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+                std.io.getStdErr().writer()
+            else
+                std.fs.File.stderr().deprecatedWriter();
             if (comptime builtin.target.cpu.arch.isWasm()) {
                 if (native_os == .wasi) {
-                    const stderr = io.getStdErr().writer();
                     stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
                 }
                 return;
             }
-            const stderr = io.getStdErr().writer();
             if (builtin.strip_debug_info) {
                 stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
                 return;
