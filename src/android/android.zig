@@ -164,7 +164,6 @@ const AndroidLog = struct {
 
     const vtable: std.Io.Writer.VTable = .{
         .drain = @This().drain,
-        .flush = @This().flush,
     };
 
     fn init(level: Level, buffer: []u8) AndroidLog {
@@ -177,59 +176,53 @@ const AndroidLog = struct {
         };
     }
 
-    /// write_line invokes '__android_log_write' and writes text to a line
-    fn write_line(_: *AndroidLog, text: []const u8) void {
-        _ = __android_log_print(
-            @intFromEnum(Level.fatal),
-            comptime if (log_tag.len == 0) null else log_tag.ptr,
-            "%.*s",
-            text.len,
-            text.ptr,
-        );
-    }
-
-    /// Repeatedly calls `VTable.drain` until `end` is zero.
-    pub fn flush(w: *std.Io.Writer) std.io.Writer.Error!void {
-        const drainFn = w.vtable.drain;
-        while (w.end != 0) _ = try drainFn(w, &.{w.buffer[0..w.end]}, 1);
-    }
-
-    fn log_buffer(logger: *AndroidLog, buffer: []const u8) std.io.Writer.Error!usize {
+    fn log_each_newline(logger: *AndroidLog, buffer: []const u8) std.io.Writer.Error!usize {
         var written: usize = 0;
         var bytes_to_log = buffer;
         while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
             const line = bytes_to_log[0..newline_pos];
-            bytes_to_log = bytes_to_log[newline_pos..];
-            logger.write_line(line);
+            bytes_to_log = bytes_to_log[newline_pos + 1 ..];
+            android_log_string(logger.level, line);
             written += line.len;
         }
         if (bytes_to_log.len == 0) return written;
-        logger.write_line(bytes_to_log);
+        android_log_string(logger.level, bytes_to_log);
         written += bytes_to_log.len;
         return written;
     }
 
     fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
         const logger: *AndroidLog = @alignCast(@fieldParentPtr("writer", w));
-        const slice = data[0 .. data.len - 1];
         var written: usize = 0;
+
+        // Consume 'buffer[0..end]' first
+        written += try logger.log_each_newline(w.buffer[0..w.end]);
+        w.end = 0;
+
+        // NOTE(jae): 2025-07-27
+        // The logic below should probably try to collect the buffers / pattern
+        // below into one buffer first so that newlines are handled as expected but I'm not willing
+        // to put the effort in.
+
+        // Write additional overflow data
+        const slice = data[0 .. data.len - 1];
         for (slice) |bytes| {
-            written += try logger.log_buffer(bytes);
+            written += try logger.log_each_newline(bytes);
         }
+
+        // The last element of data is repeated as necessary
         const pattern = data[data.len - 1];
-        written += pattern.len * splat;
         switch (pattern.len) {
             0 => {},
             1 => {
-                written += try logger.log_buffer(pattern);
+                written += try logger.log_each_newline(pattern);
             },
             else => {
                 for (0..splat) |_| {
-                    written += try logger.log_buffer(pattern);
+                    written += try logger.log_each_newline(pattern);
                 }
             },
         }
-        w.end = 0;
         return written;
     }
 
@@ -239,24 +232,6 @@ const AndroidLog = struct {
         comptime format: []const u8,
         args: anytype,
     ) void {
-        // If there are no arguments for the logging, just call Android log directly
-        const ArgsType = @TypeOf(args);
-        const args_type_info = @typeInfo(ArgsType);
-        if (args_type_info != .@"struct") {
-            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
-        }
-        const fields_info = args_type_info.@"struct".fields;
-        if (fields_info.len == 0) {
-            _ = __android_log_print(
-                @intFromEnum(Level.fatal),
-                comptime if (log_tag.len == 0) null else log_tag.ptr,
-                "%.*s",
-                format.len,
-                format.ptr,
-            );
-            return;
-        }
-
         // NOTE(jae): 2024-09-11
         // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
         // So we don't do that here.
@@ -491,5 +466,15 @@ fn android_fatal_print_c_string(
         comptime if (log_tag.len == 0) null else log_tag.ptr,
         fmt,
         c_str.ptr,
+    );
+}
+
+fn android_log_string(android_log_level: Level, text: []const u8) void {
+    _ = __android_log_print(
+        @intFromEnum(android_log_level),
+        comptime if (log_tag.len == 0) null else log_tag.ptr,
+        "%.*s",
+        text.len,
+        text.ptr,
     );
 }
