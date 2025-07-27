@@ -156,6 +156,9 @@ const AndroidLog = struct {
     level: Level,
     writer: std.Io.Writer,
 
+    /// line is a reusable buffer used to ensure the log data has a NULL terminating byte
+    line_buffer: [8192]u8,
+
     const vtable: std.Io.Writer.VTable = .{
         .drain = @This().drain,
     };
@@ -163,11 +166,57 @@ const AndroidLog = struct {
     fn init(level: Level, buffer: []u8) AndroidLog {
         return .{
             .level = level,
+            .line_buffer = undefined,
             .writer = .{
                 .buffer = buffer,
                 .vtable = &vtable,
             },
         };
+    }
+
+    /// write_line invokes '__android_log_write' and writes text to a line
+    fn write_line(logger: *AndroidLog, text: []const u8) void {
+        @memcpy(&logger.line_buffer, text);
+        logger.line_buffer[text.len] = 0;
+        const line_buffer = logger.line_buffer[0..text.len];
+
+        _ = __android_log_write(@intFromEnum(logger.level), comptime if (log_tag.len == 0) null else log_tag.ptr, line_buffer.ptr);
+    }
+
+    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
+        const logger: *AndroidLog = @alignCast(@fieldParentPtr("writer", w));
+        const slice = data[0 .. data.len - 1];
+        var written: usize = 0;
+        for (slice) |bytes| {
+            var bytes_to_log = bytes;
+            while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
+                const line = bytes_to_log[0..newline_pos];
+                bytes_to_log = bytes_to_log[newline_pos..];
+                logger.write_line(line);
+            }
+            if (bytes_to_log.len == 0) continue;
+            logger.write_line(bytes_to_log);
+            written += bytes_to_log.len;
+        }
+        const pattern = data[data.len - 1];
+        written += pattern.len * splat;
+        switch (pattern.len) {
+            0 => {},
+            1 => {
+                @panic("TODO: support 'pattern' for 1 length item (splat logging for Android)");
+                // @memset(buffer[w.end..][0..splat], pattern[0]);
+                // w.end += splat;
+            },
+            else => {
+                @panic("TODO: support 'pattern' for multiple length item (splat logging for Android)");
+                // for (0..splat) |_| {
+                //     @memcpy(buffer[w.end..][0..pattern.len], pattern);
+                //     w.end += pattern.len;
+                // }
+            },
+        }
+        w.end = 0;
+        return written;
     }
 
     fn logFn(
@@ -195,31 +244,6 @@ const AndroidLog = struct {
             logger.writer.print(prefix2 ++ format ++ "\n", args) catch return;
             logger.writer.flush() catch return;
         }
-    }
-
-    fn write(logger: *AndroidLog, text: []const u8) void {
-        _ = __android_log_write(@intFromEnum(logger.level), comptime if (log_tag.len == 0) null else log_tag.ptr, text.ptr);
-    }
-
-    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
-        const logger: *AndroidLog = @alignCast(@fieldParentPtr("writer", w));
-        const slice = data[0 .. data.len - 1];
-        // TODO: What do we do with the 'pattern'?
-        const pattern = data[slice.len];
-        var written: usize = pattern.len * splat;
-        for (slice) |bytes| {
-            var bytes_to_log = bytes;
-            while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
-                const line = bytes_to_log[0..newline_pos];
-                bytes_to_log = bytes_to_log[newline_pos..];
-                logger.write(line);
-            }
-            if (bytes_to_log.len == 0) continue;
-            logger.write(bytes_to_log);
-            written += bytes_to_log.len;
-        }
-        w.end = 0;
-        return written;
     }
 };
 
