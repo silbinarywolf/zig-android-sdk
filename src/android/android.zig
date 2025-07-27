@@ -30,6 +30,12 @@ const log_tag: [:0]const u8 = android_builtin.package_name;
 /// Source: https://developer.android.com/ndk/reference/group/logging
 extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
+/// Writes a formatted string to the log, with priority prio and tag tag.
+/// The details of formatting are the same as for printf(3)
+/// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+/// Source: https://man7.org/linux/man-pages/man3/printf.3.html
+extern "log" fn __android_log_print(prio: c_int, tag: [*c]const u8, text: [*c]const u8, ...) c_int;
+
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = std.debug.FullPanic(Panic.panic);
 
@@ -156,17 +162,14 @@ const AndroidLog = struct {
     level: Level,
     writer: std.Io.Writer,
 
-    /// line is a reusable buffer used to ensure the log data has a NULL terminating byte
-    line_buffer: [8192]u8,
-
     const vtable: std.Io.Writer.VTable = .{
         .drain = @This().drain,
+        .flush = @This().flush,
     };
 
     fn init(level: Level, buffer: []u8) AndroidLog {
         return .{
             .level = level,
-            .line_buffer = undefined,
             .writer = .{
                 .buffer = buffer,
                 .vtable = &vtable,
@@ -175,12 +178,35 @@ const AndroidLog = struct {
     }
 
     /// write_line invokes '__android_log_write' and writes text to a line
-    fn write_line(logger: *AndroidLog, text: []const u8) void {
-        @memcpy(&logger.line_buffer, text);
-        logger.line_buffer[text.len] = 0;
-        const line_buffer = logger.line_buffer[0..text.len];
+    fn write_line(_: *AndroidLog, text: []const u8) void {
+        _ = __android_log_print(
+            @intFromEnum(Level.fatal),
+            comptime if (log_tag.len == 0) null else log_tag.ptr,
+            "%.*s",
+            text.len,
+            text.ptr,
+        );
+    }
 
-        _ = __android_log_write(@intFromEnum(logger.level), comptime if (log_tag.len == 0) null else log_tag.ptr, line_buffer.ptr);
+    /// Repeatedly calls `VTable.drain` until `end` is zero.
+    pub fn flush(w: *std.Io.Writer) std.io.Writer.Error!void {
+        const drainFn = w.vtable.drain;
+        while (w.end != 0) _ = try drainFn(w, &.{w.buffer[0..w.end]}, 1);
+    }
+
+    fn log_buffer(logger: *AndroidLog, buffer: []const u8) std.io.Writer.Error!usize {
+        var written: usize = 0;
+        var bytes_to_log = buffer;
+        while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
+            const line = bytes_to_log[0..newline_pos];
+            bytes_to_log = bytes_to_log[newline_pos..];
+            logger.write_line(line);
+            written += line.len;
+        }
+        if (bytes_to_log.len == 0) return written;
+        logger.write_line(bytes_to_log);
+        written += bytes_to_log.len;
+        return written;
     }
 
     fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
@@ -188,31 +214,19 @@ const AndroidLog = struct {
         const slice = data[0 .. data.len - 1];
         var written: usize = 0;
         for (slice) |bytes| {
-            var bytes_to_log = bytes;
-            while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
-                const line = bytes_to_log[0..newline_pos];
-                bytes_to_log = bytes_to_log[newline_pos..];
-                logger.write_line(line);
-            }
-            if (bytes_to_log.len == 0) continue;
-            logger.write_line(bytes_to_log);
-            written += bytes_to_log.len;
+            written += try logger.log_buffer(bytes);
         }
         const pattern = data[data.len - 1];
         written += pattern.len * splat;
         switch (pattern.len) {
             0 => {},
             1 => {
-                @panic("TODO: support 'pattern' for 1 length item (splat logging for Android)");
-                // @memset(buffer[w.end..][0..splat], pattern[0]);
-                // w.end += splat;
+                written += try logger.log_buffer(pattern);
             },
             else => {
-                @panic("TODO: support 'pattern' for multiple length item (splat logging for Android)");
-                // for (0..splat) |_| {
-                //     @memcpy(buffer[w.end..][0..pattern.len], pattern);
-                //     w.end += pattern.len;
-                // }
+                for (0..splat) |_| {
+                    written += try logger.log_buffer(pattern);
+                }
             },
         }
         w.end = 0;
@@ -225,6 +239,24 @@ const AndroidLog = struct {
         comptime format: []const u8,
         args: anytype,
     ) void {
+        // If there are no arguments for the logging, just call Android log directly
+        const ArgsType = @TypeOf(args);
+        const args_type_info = @typeInfo(ArgsType);
+        if (args_type_info != .@"struct") {
+            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+        }
+        const fields_info = args_type_info.@"struct".fields;
+        if (fields_info.len == 0) {
+            _ = __android_log_print(
+                @intFromEnum(Level.fatal),
+                comptime if (log_tag.len == 0) null else log_tag.ptr,
+                "%.*s",
+                format.len,
+                format.ptr,
+            );
+            return;
+        }
+
         // NOTE(jae): 2024-09-11
         // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
         // So we don't do that here.
@@ -359,15 +391,25 @@ const Panic = struct {
                 {
                     panic_mutex.lock();
                     defer panic_mutex.unlock();
-
-                    const stderr = io.getAndroidLogWriter();
                     if (builtin.single_threaded) {
-                        stderr.print("panic: ", .{}) catch posix.abort();
+                        _ = __android_log_print(
+                            @intFromEnum(Level.fatal),
+                            comptime if (log_tag.len == 0) null else log_tag.ptr,
+                            "panic: %.*s",
+                            msg.len,
+                            msg.ptr,
+                        );
                     } else {
-                        const current_thread_id = std.Thread.getCurrentId();
-                        stderr.print("thread {} panic: ", .{current_thread_id}) catch posix.abort();
+                        const current_thread_id: u32 = std.Thread.getCurrentId();
+                        _ = __android_log_print(
+                            @intFromEnum(Level.fatal),
+                            comptime if (log_tag.len == 0) null else log_tag.ptr,
+                            "thread %d panic: %.*s",
+                            current_thread_id,
+                            msg.len,
+                            msg.ptr,
+                        );
                     }
-                    stderr.print("{s}\n", .{msg}) catch posix.abort();
                     if (@errorReturnTrace()) |t| dumpStackTrace(t.*);
                     dumpCurrentStackTrace(first_trace_addr);
                 }
@@ -398,13 +440,13 @@ const Panic = struct {
             if (builtin.strip_debug_info) {
                 android_fatal_log("Unable to dump stack trace: debug info stripped");
             }
-            const stderr = io.getAndroidLogWriter();
             const debug_info = std.debug.getSelfDebugInfo() catch |err| {
-                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
+                android_fatal_print_c_string("Unable to dump stack trace: Unable to open debug info: %s", @errorName(err));
                 return;
             };
+            const stderr = io.getAndroidLogWriter();
             std.debug.writeStackTrace(stack_trace, stderr, debug_info, .no_color) catch |err| {
-                stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
+                android_fatal_print_c_string("Unable to dump stack trace: %s", @errorName(err));
                 return;
             };
         }
@@ -419,13 +461,13 @@ const Panic = struct {
                 android_fatal_log("Unable to dump stack trace: debug info stripped");
                 return;
             }
-            const stderr = io.getAndroidLogWriter();
             const debug_info = std.debug.getSelfDebugInfo() catch |err| {
-                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
+                android_fatal_print_c_string("Unable to dump stack trace: Unable to open debug info: %s", @errorName(err));
                 return;
             };
+            const stderr = io.getAndroidLogWriter();
             std.debug.writeCurrentStackTrace(stderr, debug_info, .no_color, start_addr) catch |err| {
-                stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
+                android_fatal_print_c_string("Unable to dump stack trace: %s", @errorName(err));
                 return;
             };
         }
@@ -437,5 +479,17 @@ fn android_fatal_log(message: [:0]const u8) void {
         @intFromEnum(Level.fatal),
         comptime if (log_tag.len == 0) null else log_tag.ptr,
         message,
+    );
+}
+
+fn android_fatal_print_c_string(
+    comptime fmt: [:0]const u8,
+    c_str: [:0]const u8,
+) void {
+    _ = __android_log_print(
+        @intFromEnum(Level.fatal),
+        comptime if (log_tag.len == 0) null else log_tag.ptr,
+        fmt,
+        c_str.ptr,
     );
 }
