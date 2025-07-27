@@ -13,10 +13,28 @@ const android_builtin = struct {
     pub const package_name: [:0]const u8 = ab.package_name;
 };
 
+/// Default to the "package" attribute defined in AndroidManifest.xml
+///
+/// If tag isn't set when calling "__android_log_write" then it *usually* defaults to the current
+/// package name, ie. "com.zig.minimal"
+///
+/// However if running via a seperate thread, then it seems to use that threads
+/// tag, which means if you log after running code through sdl_main, it won't print
+/// logs with the package name.
+///
+/// To workaround this, we bake the package name into the Zig binaries.
+const log_tag: [:0]const u8 = android_builtin.package_name;
+
 /// Writes the constant string text to the log, with priority prio and tag tag.
 /// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
 /// Source: https://developer.android.com/ndk/reference/group/logging
 extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
+
+/// Writes a formatted string to the log, with priority prio and tag tag.
+/// The details of formatting are the same as for printf(3)
+/// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+/// Source: https://man7.org/linux/man-pages/man3/printf.3.html
+extern "log" fn __android_log_print(prio: c_int, tag: [*c]const u8, text: [*c]const u8, ...) c_int;
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = std.debug.FullPanic(Panic.panic);
@@ -51,62 +69,49 @@ pub const Level = enum(u8) {
 };
 
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
-pub fn logFn(
-    comptime message_level: std.log.Level,
-    comptime scope: if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13)
-        // Support Zig 0.13.0
-        @Type(.EnumLiteral)
-    else
-        // Support Zig 0.14.0-dev
-        @Type(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    // NOTE(jae): 2024-09-11
-    // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
-    // So we don't do that here.
-    const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
-    var androidLogWriter = comptime LogWriter{
-        .level = switch (message_level) {
-            //  => .ANDROID_LOG_VERBOSE, // No mapping
-            .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
-            .info => .info, // android.ANDROID_LOG_INFO = 4,
-            .warn => .warn, // android.ANDROID_LOG_WARN = 5,
-            .err => .err, // android.ANDROID_LOG_WARN = 6,
-        },
-    };
-    const writer = androidLogWriter.writer();
+pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+    LogWriter_Zig014.logFn
+else
+    AndroidLog.logFn;
 
-    nosuspend {
-        writer.print(prefix2 ++ format ++ "\n", args) catch return;
-        androidLogWriter.flush();
-    }
-}
-
-/// LogWriter was was taken basically as is from: https://github.com/ikskuh/ZigAndroidTemplate
-const LogWriter = struct {
-    /// Default to the "package" attribute defined in AndroidManifest.xml
-    ///
-    /// If tag isn't set when calling "__android_log_write" then it *usually* defaults to the current
-    /// package name, ie. "com.zig.minimal"
-    ///
-    /// However if running via a seperate thread, then it seems to use that threads
-    /// tag, which means if you log after running code through sdl_main, it won't print
-    /// logs with the package name.
-    ///
-    /// To workaround this, we bake the package name into the Zig binaries.
-    const tag: [:0]const u8 = android_builtin.package_name;
-
+/// LogWriter_Zig014 was was taken basically as is from: https://github.com/ikskuh/ZigAndroidTemplate
+///
+/// Deprecated: To be removed when Zig 0.15.x is stable
+const LogWriter_Zig014 = struct {
     level: Level,
 
     line_buffer: [8192]u8 = undefined,
     line_len: usize = 0,
 
     const Error = error{};
-    const Writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14)
-        std.io.Writer(*@This(), Error, write)
-    else
-        std.io.GenericWriter(*@This(), Error, write);
+    const Writer = std.io.Writer(*@This(), Error, write);
+
+    fn logFn(
+        comptime message_level: std.log.Level,
+        comptime scope: @Type(.enum_literal),
+        comptime format: []const u8,
+        args: anytype,
+    ) void {
+        // NOTE(jae): 2024-09-11
+        // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
+        // So we don't do that here.
+        const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
+        var androidLogWriter = comptime @This(){
+            .level = switch (message_level) {
+                //  => .ANDROID_LOG_VERBOSE, // No mapping
+                .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
+                .info => .info, // android.ANDROID_LOG_INFO = 4,
+                .warn => .warn, // android.ANDROID_LOG_WARN = 5,
+                .err => .err, // android.ANDROID_LOG_WARN = 6,
+            },
+        };
+        const logger = androidLogWriter.writer();
+
+        nosuspend {
+            logger.print(prefix2 ++ format ++ "\n", args) catch return;
+            androidLogWriter.flush();
+        }
+    }
 
     fn write(self: *@This(), buffer: []const u8) Error!usize {
         for (buffer) |char| {
@@ -130,7 +135,7 @@ const LogWriter = struct {
         if (self.line_len > 0) {
             std.debug.assert(self.line_len < self.line_buffer.len - 1);
             self.line_buffer[self.line_len] = 0;
-            if (tag.len == 0) {
+            if (log_tag.len == 0) {
                 _ = __android_log_write(
                     @intFromEnum(self.level),
                     null,
@@ -139,7 +144,7 @@ const LogWriter = struct {
             } else {
                 _ = __android_log_write(
                     @intFromEnum(self.level),
-                    tag.ptr,
+                    log_tag.ptr,
                     &self.line_buffer,
                 );
             }
@@ -149,6 +154,123 @@ const LogWriter = struct {
 
     fn writer(self: *@This()) Writer {
         return Writer{ .context = self };
+    }
+};
+
+/// AndroidLog is a Writer interface that logs out to Android via "__android_log_write" calls
+const AndroidLog = struct {
+    level: Level,
+    writer: std.Io.Writer,
+
+    const vtable: std.Io.Writer.VTable = .{
+        .drain = @This().drain,
+    };
+
+    fn init(level: Level, buffer: []u8) AndroidLog {
+        return .{
+            .level = level,
+            .writer = .{
+                .buffer = buffer,
+                .vtable = &vtable,
+            },
+        };
+    }
+
+    fn log_each_newline(logger: *AndroidLog, buffer: []const u8) std.io.Writer.Error!usize {
+        var written: usize = 0;
+        var bytes_to_log = buffer;
+        while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
+            const line = bytes_to_log[0..newline_pos];
+            bytes_to_log = bytes_to_log[newline_pos + 1 ..];
+            android_log_string(logger.level, line);
+            written += line.len;
+        }
+        if (bytes_to_log.len == 0) return written;
+        android_log_string(logger.level, bytes_to_log);
+        written += bytes_to_log.len;
+        return written;
+    }
+
+    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
+        const logger: *AndroidLog = @alignCast(@fieldParentPtr("writer", w));
+        var written: usize = 0;
+
+        // Consume 'buffer[0..end]' first
+        written += try logger.log_each_newline(w.buffer[0..w.end]);
+        w.end = 0;
+
+        // NOTE(jae): 2025-07-27
+        // The logic below should probably try to collect the buffers / pattern
+        // below into one buffer first so that newlines are handled as expected but I'm not willing
+        // to put the effort in.
+
+        // Write additional overflow data
+        const slice = data[0 .. data.len - 1];
+        for (slice) |bytes| {
+            written += try logger.log_each_newline(bytes);
+        }
+
+        // The last element of data is repeated as necessary
+        const pattern = data[data.len - 1];
+        switch (pattern.len) {
+            0 => {},
+            1 => {
+                written += try logger.log_each_newline(pattern);
+            },
+            else => {
+                for (0..splat) |_| {
+                    written += try logger.log_each_newline(pattern);
+                }
+            },
+        }
+        return written;
+    }
+
+    fn logFn(
+        comptime message_level: std.log.Level,
+        comptime scope: @Type(.enum_literal),
+        comptime format: []const u8,
+        args: anytype,
+    ) void {
+        // If there are no arguments or '{}' patterns in the logging, just call Android log directly
+        const ArgsType = @TypeOf(args);
+        const args_type_info = @typeInfo(ArgsType);
+        if (args_type_info != .@"struct") {
+            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+        }
+        const fields_info = args_type_info.@"struct".fields;
+        if (fields_info.len == 0 and
+            comptime std.mem.indexOfScalar(u8, format, '{') == null)
+        {
+            _ = __android_log_print(
+                @intFromEnum(Level.fatal),
+                comptime if (log_tag.len == 0) null else log_tag.ptr,
+                "%.*s",
+                format.len,
+                format.ptr,
+            );
+            return;
+        }
+
+        // NOTE(jae): 2024-09-11
+        // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
+        // So we don't do that here.
+        const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
+
+        const android_log_level: Level = switch (message_level) {
+            //  => .ANDROID_LOG_VERBOSE, // No mapping
+            .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
+            .info => .info, // android.ANDROID_LOG_INFO = 4,
+            .warn => .warn, // android.ANDROID_LOG_WARN = 5,
+            .err => .err, // android.ANDROID_LOG_WARN = 6,
+        };
+        var buffer: [8192]u8 = undefined;
+        var logger = AndroidLog.init(android_log_level, &buffer);
+
+        nosuspend {
+            logger.writer.print(prefix2 ++ format ++ "\n", args) catch return;
+            logger.writer.flush() catch return;
+        }
     }
 };
 
@@ -164,9 +286,6 @@ const Panic = struct {
     /// The counter is incremented/decremented atomically.
     var panicking = std.atomic.Value(u8).init(0);
 
-    // Locked to avoid interleaving panic messages from multiple threads.
-    var panic_mutex = std.Thread.Mutex{};
-
     /// Counts how many times the panic handler is invoked by this thread.
     /// This is used to catch and handle panics triggered by the panic handler.
     threadlocal var panic_stage: usize = 0;
@@ -175,8 +294,8 @@ const Panic = struct {
 
     fn panic(message: []const u8, ret_addr: ?usize) noreturn {
         @branchHint(.cold);
-        if (!is_zig_014_or_less) @compileError("Android Panic needs to be updated to the newer io.Writer vtable implementation to work in Zig 0.15.0+");
         if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
+        // if (!is_zig_014_or_less) @compileError("Android Panic needs to be updated to the newer io.Writer vtable implementation to work in Zig 0.15.0+");
         const first_trace_addr = ret_addr orelse @returnAddress();
         panicImpl(first_trace_addr, message);
     }
@@ -195,13 +314,10 @@ const Panic = struct {
         }
     }
 
-    const native_os = builtin.os.tag;
-    const updateSegfaultHandler = std.debug.updateSegfaultHandler;
-
     fn resetSegfaultHandler() void {
         // NOTE(jae): 2024-09-22
         // Not applicable for Android as it runs on the OS tag Linux
-        // if (native_os == .windows) {
+        // if (builtin.os.tag == .windows) {
         //     if (windows_segfault_handle) |handle| {
         //         assert(windows.kernel32.RemoveVectoredExceptionHandler(handle) != 0);
         //         windows_segfault_handle = null;
@@ -218,28 +334,50 @@ const Panic = struct {
                 posix.sigemptyset(),
             .flags = 0,
         };
-        // To avoid a double-panic, do nothing if an error happens here.
-        if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13) {
-            // Legacy 0.13.0
-            updateSegfaultHandler(&act) catch {};
-        } else {
-            // 0.14.0-dev+
-            updateSegfaultHandler(&act);
-        }
+        std.debug.updateSegfaultHandler(&act);
     }
 
     const io = struct {
-        var writer = LogWriter{
-            .level = .fatal,
-        };
+        /// Collect data in writer buffer and flush to Android logs per newline
+        var android_log_writer_buffer: [8192]u8 = undefined;
 
-        inline fn getStdErr() *LogWriter {
-            return &writer;
+        /// The primary motivation for recursive mutex here is so that a panic while
+        /// android log writer mutex is held still dumps the stack trace and other debug
+        /// information.
+        var android_log_writer_mutex = std.Thread.Mutex.Recursive.init;
+
+        var android_panic_log_writer = if (is_zig_014_or_less)
+            LogWriter_Zig014{
+                .level = .fatal,
+            }
+        else
+            AndroidLog.init(.fatal, &android_log_writer_buffer);
+
+        fn lockAndroidLogWriter() if (is_zig_014_or_less)
+            std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write)
+        else
+            *std.Io.Writer {
+            android_log_writer_mutex.lock();
+            if (is_zig_014_or_less) {
+                android_panic_log_writer.flush();
+                return android_panic_log_writer.writer();
+            } else {
+                android_panic_log_writer.writer.flush() catch {};
+                return &android_panic_log_writer.writer;
+            }
+        }
+
+        fn unlockAndroidLogWriter() void {
+            if (is_zig_014_or_less) {
+                android_panic_log_writer.flush();
+            } else {
+                android_panic_log_writer.writer.flush() catch {};
+            }
+            android_log_writer_mutex.unlock();
         }
     };
 
     const posix = std.posix;
-    const enable_segfault_handler = std.options.enable_segfault_handler;
 
     /// Panic is a copy-paste of the panic logic from Zig but replaces usages of getStdErr with our own writer
     ///
@@ -248,7 +386,7 @@ const Panic = struct {
     fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
         @branchHint(.cold);
 
-        if (enable_segfault_handler) {
+        if (std.options.enable_segfault_handler) {
             // If a segfault happens while panicking, we want it to actually segfault, not trigger
             // the handler.
             resetSegfaultHandler();
@@ -263,19 +401,33 @@ const Panic = struct {
 
                 // Make sure to release the mutex when done
                 {
-                    panic_mutex.lock();
-                    defer panic_mutex.unlock();
-
-                    const stderr = io.getStdErr().writer();
                     if (builtin.single_threaded) {
-                        stderr.print("panic: ", .{}) catch posix.abort();
+                        _ = __android_log_print(
+                            @intFromEnum(Level.fatal),
+                            comptime if (log_tag.len == 0) null else log_tag.ptr,
+                            "panic: %.*s",
+                            msg.len,
+                            msg.ptr,
+                        );
                     } else {
-                        const current_thread_id = std.Thread.getCurrentId();
-                        stderr.print("thread {} panic: ", .{current_thread_id}) catch posix.abort();
+                        const current_thread_id: u32 = std.Thread.getCurrentId();
+                        _ = __android_log_print(
+                            @intFromEnum(Level.fatal),
+                            comptime if (log_tag.len == 0) null else log_tag.ptr,
+                            "thread %d panic: %.*s",
+                            current_thread_id,
+                            msg.len,
+                            msg.ptr,
+                        );
                     }
-                    stderr.print("{s}\n", .{msg}) catch posix.abort();
                     if (@errorReturnTrace()) |t| dumpStackTrace(t.*);
-                    dumpCurrentStackTrace(first_trace_addr);
+                    if (is_zig_014_or_less) {
+                        dumpCurrentStackTrace_014(first_trace_addr);
+                    } else {
+                        const stderr = io.lockAndroidLogWriter();
+                        defer io.unlockAndroidLogWriter();
+                        std.debug.dumpCurrentStackTraceToWriter(first_trace_addr orelse @returnAddress(), stderr) catch {};
+                    }
                 }
 
                 waitForOtherThreadToFinishPanicking();
@@ -286,8 +438,7 @@ const Panic = struct {
                 // A panic happened while trying to print a previous panic message,
                 // we're still holding the mutex but that's fine as we're going to
                 // call abort()
-                const stderr = io.getStdErr().writer();
-                stderr.print("Panicked during a panic. Aborting.\n", .{}) catch posix.abort();
+                android_fatal_log("Panicked during a panic. Aborting.");
             },
             else => {
                 // Panicked while printing "Panicked during a panic."
@@ -297,69 +448,77 @@ const Panic = struct {
         posix.abort();
     }
 
-    const getSelfDebugInfo = std.debug.getSelfDebugInfo;
-    const writeStackTrace = std.debug.writeStackTrace;
-
-    // Used for 0.13.0 compatibility, technically this allocator is completely unused by "writeStackTrace"
-    fn getDebugInfoAllocator() std.mem.Allocator {
-        return std.heap.page_allocator;
-    }
-
     fn dumpStackTrace(stack_trace: std.builtin.StackTrace) void {
         nosuspend {
-            const stderr = io.getStdErr().writer();
             if (comptime builtin.target.cpu.arch.isWasm()) {
-                if (native_os == .wasi) {
-                    stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
-                }
-                return;
+                @compileError("cannot use Android logger with Wasm");
             }
             if (builtin.strip_debug_info) {
-                stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
-                return;
+                android_fatal_log("Unable to dump stack trace: debug info stripped");
             }
-            const debug_info = getSelfDebugInfo() catch |err| {
-                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
+            const debug_info = std.debug.getSelfDebugInfo() catch |err| {
+                android_fatal_print_c_string("Unable to dump stack trace: Unable to open debug info: %s", @errorName(err));
                 return;
             };
-            if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 13) {
-                // Legacy 0.13.0
-                writeStackTrace(stack_trace, stderr, getDebugInfoAllocator(), debug_info, .no_color) catch |err| {
-                    stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
-                    return;
-                };
-            } else {
-                // 0.14.0-dev+
-                writeStackTrace(stack_trace, stderr, debug_info, .no_color) catch |err| {
-                    stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
-                    return;
-                };
-            }
+            const stderr = io.lockAndroidLogWriter();
+            defer io.unlockAndroidLogWriter();
+            std.debug.writeStackTrace(stack_trace, stderr, debug_info, .no_color) catch |err| {
+                android_fatal_print_c_string("Unable to dump stack trace: %s", @errorName(err));
+                return;
+            };
         }
     }
 
-    const writeCurrentStackTrace = std.debug.writeCurrentStackTrace;
-    fn dumpCurrentStackTrace(start_addr: ?usize) void {
+    /// Deprecated: Only used for current Zig 0.14.1 stable builds,
+    fn dumpCurrentStackTrace_014(start_addr: ?usize) void {
         nosuspend {
-            const stderr = io.getStdErr().writer();
             if (comptime builtin.target.cpu.arch.isWasm()) {
-                if (native_os == .wasi) {
-                    stderr.print("Unable to dump stack trace: not implemented for Wasm\n", .{}) catch return;
-                }
-                return;
+                @compileError("cannot use Android logger with Wasm");
             }
             if (builtin.strip_debug_info) {
-                stderr.print("Unable to dump stack trace: debug info stripped\n", .{}) catch return;
+                android_fatal_log("Unable to dump stack trace: debug info stripped");
                 return;
             }
-            const debug_info = getSelfDebugInfo() catch |err| {
-                stderr.print("Unable to dump stack trace: Unable to open debug info: {s}\n", .{@errorName(err)}) catch return;
+            const debug_info = std.debug.getSelfDebugInfo() catch |err| {
+                android_fatal_print_c_string("Unable to dump stack trace: Unable to open debug info: %s", @errorName(err));
                 return;
             };
-            writeCurrentStackTrace(stderr, debug_info, .no_color, start_addr) catch |err| {
-                stderr.print("Unable to dump stack trace: {s}\n", .{@errorName(err)}) catch return;
+            const stderr = io.lockAndroidLogWriter();
+            defer io.unlockAndroidLogWriter();
+            std.debug.writeCurrentStackTrace(stderr, debug_info, .no_color, start_addr) catch |err| {
+                android_fatal_print_c_string("Unable to dump stack trace: %s", @errorName(err));
                 return;
             };
         }
     }
 };
+
+fn android_fatal_log(message: [:0]const u8) void {
+    _ = __android_log_write(
+        @intFromEnum(Level.fatal),
+        comptime if (log_tag.len == 0) null else log_tag.ptr,
+        message,
+    );
+}
+
+fn android_fatal_print_c_string(
+    comptime fmt: [:0]const u8,
+    c_str: [:0]const u8,
+) void {
+    _ = __android_log_print(
+        @intFromEnum(Level.fatal),
+        comptime if (log_tag.len == 0) null else log_tag.ptr,
+        fmt,
+        c_str.ptr,
+    );
+}
+
+fn android_log_string(android_log_level: Level, text: []const u8) void {
+    _ = __android_log_print(
+        @intFromEnum(android_log_level),
+        comptime if (log_tag.len == 0) null else log_tag.ptr,
+        "%.*s",
+        text.len,
+        text.ptr,
+    );
+}
