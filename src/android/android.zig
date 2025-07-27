@@ -232,6 +232,26 @@ const AndroidLog = struct {
         comptime format: []const u8,
         args: anytype,
     ) void {
+        // If there are no arguments or '{}' patterns in the logging, just call Android log directly
+        const ArgsType = @TypeOf(args);
+        const args_type_info = @typeInfo(ArgsType);
+        if (args_type_info != .@"struct") {
+            @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
+        }
+        const fields_info = args_type_info.@"struct".fields;
+        if (fields_info.len == 0 and
+            comptime std.mem.indexOfScalar(u8, format, '{') == null)
+        {
+            _ = __android_log_print(
+                @intFromEnum(Level.fatal),
+                comptime if (log_tag.len == 0) null else log_tag.ptr,
+                "%.*s",
+                format.len,
+                format.ptr,
+            );
+            return;
+        }
+
         // NOTE(jae): 2024-09-11
         // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
         // So we don't do that here.
@@ -321,22 +341,42 @@ const Panic = struct {
     }
 
     const io = struct {
-        var log_buffer: [8192]u8 = undefined;
-        var writer = if (is_zig_014_or_less)
+        /// Collect data in writer buffer and flush to Android logs per newline
+        var android_log_writer_buffer: [8192]u8 = undefined;
+
+        /// The primary motivation for recursive mutex here is so that a panic while
+        /// android log writer mutex is held still dumps the stack trace and other debug
+        /// information.
+        var android_log_writer_mutex = std.Thread.Mutex.Recursive.init;
+
+        var android_panic_log_writer = if (is_zig_014_or_less)
             LogWriter_Zig014{
                 .level = .fatal,
             }
         else
-            AndroidLog.init(.fatal, &log_buffer);
+            AndroidLog.init(.fatal, &android_log_writer_buffer);
 
-        inline fn getAndroidLogWriter() if (is_zig_014_or_less)
+        fn lockAndroidLogWriter() if (is_zig_014_or_less)
             std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write)
         else
             *std.Io.Writer {
-            if (is_zig_014_or_less)
-                return writer.writer()
-            else
-                return &writer.writer;
+            android_log_writer_mutex.lock();
+            if (is_zig_014_or_less) {
+                android_panic_log_writer.flush();
+                return android_panic_log_writer.writer();
+            } else {
+                android_panic_log_writer.writer.flush() catch {};
+                return &android_panic_log_writer.writer;
+            }
+        }
+
+        fn unlockAndroidLogWriter() void {
+            if (is_zig_014_or_less) {
+                android_panic_log_writer.flush();
+            } else {
+                android_panic_log_writer.writer.flush() catch {};
+            }
+            android_log_writer_mutex.unlock();
         }
     };
 
@@ -419,7 +459,8 @@ const Panic = struct {
                 android_fatal_print_c_string("Unable to dump stack trace: Unable to open debug info: %s", @errorName(err));
                 return;
             };
-            const stderr = io.getAndroidLogWriter();
+            const stderr = io.lockAndroidLogWriter();
+            defer io.unlockAndroidLogWriter();
             std.debug.writeStackTrace(stack_trace, stderr, debug_info, .no_color) catch |err| {
                 android_fatal_print_c_string("Unable to dump stack trace: %s", @errorName(err));
                 return;
@@ -440,7 +481,8 @@ const Panic = struct {
                 android_fatal_print_c_string("Unable to dump stack trace: Unable to open debug info: %s", @errorName(err));
                 return;
             };
-            const stderr = io.getAndroidLogWriter();
+            const stderr = io.lockAndroidLogWriter();
+            defer io.unlockAndroidLogWriter();
             std.debug.writeCurrentStackTrace(stderr, debug_info, .no_color, start_addr) catch |err| {
                 android_fatal_print_c_string("Unable to dump stack trace: %s", @errorName(err));
                 return;
