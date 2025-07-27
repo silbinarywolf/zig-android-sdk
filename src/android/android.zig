@@ -421,7 +421,13 @@ const Panic = struct {
                         );
                     }
                     if (@errorReturnTrace()) |t| dumpStackTrace(t.*);
-                    dumpCurrentStackTrace(first_trace_addr);
+                    if (is_zig_014_or_less) {
+                        dumpCurrentStackTrace_014(first_trace_addr);
+                    } else {
+                        const stderr = io.lockAndroidLogWriter();
+                        defer io.unlockAndroidLogWriter();
+                        std.debug.dumpCurrentStackTraceToWriter(first_trace_addr orelse @returnAddress(), stderr) catch {};
+                    }
                 }
 
                 waitForOtherThreadToFinishPanicking();
@@ -463,7 +469,8 @@ const Panic = struct {
         }
     }
 
-    fn dumpCurrentStackTrace(start_addr: ?usize) void {
+    /// Deprecated: Only used for current Zig 0.14.1 stable builds,
+    fn dumpCurrentStackTrace_014(start_addr: ?usize) void {
         nosuspend {
             if (comptime builtin.target.cpu.arch.isWasm()) {
                 @compileError("cannot use Android logger with Wasm");
