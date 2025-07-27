@@ -286,9 +286,6 @@ const Panic = struct {
     /// The counter is incremented/decremented atomically.
     var panicking = std.atomic.Value(u8).init(0);
 
-    // Locked to avoid interleaving panic messages from multiple threads.
-    var panic_mutex = std.Thread.Mutex{};
-
     /// Counts how many times the panic handler is invoked by this thread.
     /// This is used to catch and handle panics triggered by the panic handler.
     threadlocal var panic_stage: usize = 0;
@@ -404,8 +401,6 @@ const Panic = struct {
 
                 // Make sure to release the mutex when done
                 {
-                    panic_mutex.lock();
-                    defer panic_mutex.unlock();
                     if (builtin.single_threaded) {
                         _ = __android_log_print(
                             @intFromEnum(Level.fatal),
