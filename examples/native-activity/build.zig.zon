@@ -1,0 +1,14 @@
+.{
+    .name = .native_activity,
+    .version = "0.0.0",
+    .fingerprint = 0xe31e7fb5499884f3, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.14.1",
+    .dependencies = .{
+        .android = .{ .path = "../.." },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
