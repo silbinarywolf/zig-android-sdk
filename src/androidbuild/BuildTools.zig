@@ -20,7 +20,7 @@ pub const empty: BuildTools = .{
 
 const BuildToolError = Allocator.Error || error{BuildToolFailed};
 
-pub fn init(b: *std.Build, android_sdk_path: []const u8, build_tools_version: []const u8, errors: *std.ArrayList([]const u8)) BuildToolError!BuildTools {
+pub fn init(b: *std.Build, android_sdk_path: []const u8, build_tools_version: []const u8, errors: *std.ArrayListUnmanaged([]const u8)) BuildToolError!BuildTools {
     const prev_errors_len = errors.items.len;
 
     // Get build tools path
@@ -38,14 +38,14 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, build_tools_version: []
             const message = b.fmt("Android Build Tool version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
                 build_tools_version,
             });
-            errors.append(message) catch @panic("OOM");
+            errors.append(b.allocator, message) catch @panic("OOM");
         },
         else => {
             const message = b.fmt("Android Build Tool version '{s}' had unexpected error: {s}", .{
                 build_tools_version,
                 @errorName(err),
             });
-            errors.append(message) catch @panic("OOM");
+            errors.append(b.allocator, message) catch @panic("OOM");
         },
     };
     if (errors.items.len != prev_errors_len) {
