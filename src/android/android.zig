@@ -176,7 +176,7 @@ const AndroidLog = struct {
         };
     }
 
-    fn log_each_newline(logger: *AndroidLog, buffer: []const u8) std.io.Writer.Error!usize {
+    fn log_each_newline(logger: *AndroidLog, buffer: []const u8) std.Io.Writer.Error!usize {
         var written: usize = 0;
         var bytes_to_log = buffer;
         while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
@@ -191,7 +191,7 @@ const AndroidLog = struct {
         return written;
     }
 
-    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.io.Writer.Error!usize {
+    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
         const logger: *AndroidLog = @alignCast(@fieldParentPtr("writer", w));
         var written: usize = 0;
 
