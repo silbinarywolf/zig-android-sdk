@@ -103,14 +103,12 @@ jobs:
       with:
         version: "0.14.0"
 
-    - name: Build Minimal Example (Zig Stable)
+    - name: Build Minimal Example (Zig Previous Stable)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (Zig Stable)
-      run: |
-        zig build -Dandroid=true --verbose
-        zig build -Dandroid=true -Dcrash-on-exception --verbose
+    - name: Build SDL2 Example (Zig Previous Stable)
+      run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
     #
