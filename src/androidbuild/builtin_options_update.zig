@@ -45,7 +45,9 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
 
     // Read package name from stdout and strip line feed / carriage return
     // ie. "com.zig.sdl2\n\r"
-    const package_name_filedata = try package_name_path.root_dir.handle.readFileAlloc(b.allocator, package_name_path.sub_path, 8192);
+    const package_name_backing_buf = try b.allocator.alloc(u8, 8192);
+    defer b.allocator.free(package_name_backing_buf);
+    const package_name_filedata = try package_name_path.root_dir.handle.readFile(package_name_path.sub_path, package_name_backing_buf);
     const package_name_stripped = std.mem.trimRight(u8, package_name_filedata, " \r\n");
     const package_name: [:0]const u8 = try b.allocator.dupeZ(u8, package_name_stripped);
 
