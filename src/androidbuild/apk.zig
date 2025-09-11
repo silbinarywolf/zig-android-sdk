@@ -60,8 +60,8 @@ pub const Options = struct {
 pub fn create(sdk: *Sdk, options: Options) *Apk {
     const b = sdk.b;
 
-    var errors = std.ArrayList([]const u8).init(b.allocator);
-    defer errors.deinit();
+    var errors = std.ArrayListUnmanaged([]const u8).empty;
+    defer errors.deinit(b.allocator);
 
     const build_tools = BuildTools.init(b, sdk.android_sdk_path, options.build_tools_version, &errors) catch |err| switch (err) {
         error.BuildToolFailed => BuildTools.empty, // fallthruogh and print all errors below
@@ -213,35 +213,37 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
 
     // validate
     {
-        var errors = std.ArrayList([]const u8).init(b.allocator);
+        var errors = std.ArrayListUnmanaged([]const u8).empty;
+        defer errors.deinit(b.allocator);
+
         if (key_store.password.len == 0) {
-            try errors.append("Keystore not configured with password, must be setup with setKeyStore");
+            try errors.append(b.allocator, "Keystore not configured with password, must be setup with setKeyStore");
         }
         if (apk.android_manifest == null) {
-            try errors.append("AndroidManifest.xml not configured, must be set with setAndroidManifest");
+            try errors.append(b.allocator, "AndroidManifest.xml not configured, must be set with setAndroidManifest");
         }
         if (apk.artifacts.items.len == 0) {
-            try errors.append("Must add at least one artifact targeting a valid Android CPU architecture: aarch64, x86_64, x86, etc");
+            try errors.append(b.allocator, "Must add at least one artifact targeting a valid Android CPU architecture: aarch64, x86_64, x86, etc");
         } else {
             for (apk.artifacts.items, 0..) |artifact, i| {
                 if (artifact.kind == .exe) {
-                    try errors.append(b.fmt("artifact[{}]: must make Android artifacts be created with addSharedLibrary, not addExecutable", .{i}));
+                    try errors.append(b.allocator, b.fmt("artifact[{}]: must make Android artifacts be created with addSharedLibrary, not addExecutable", .{i}));
                 } else {
                     if (artifact.linkage) |linkage| {
                         if (linkage != .dynamic) {
-                            try errors.append(b.fmt("artifact[{}]: invalid linkage, expected it to be created via addSharedLibrary", .{i}));
+                            try errors.append(b.allocator, b.fmt("artifact[{}]: invalid linkage, expected it to be created via addSharedLibrary", .{i}));
                         }
                     } else {
-                        try errors.append(b.fmt("artifact[{}]: unable to get linkage from artifact, expected it to be created via addSharedLibrary", .{i}));
+                        try errors.append(b.allocator, b.fmt("artifact[{}]: unable to get linkage from artifact, expected it to be created via addSharedLibrary", .{i}));
                     }
                 }
                 if (artifact.root_module.resolved_target) |target| {
                     if (!target.result.abi.isAndroid()) {
-                        try errors.append(b.fmt("artifact[{}]: must be targetting Android abi", .{i}));
+                        try errors.append(b.allocator, b.fmt("artifact[{}]: must be targetting Android abi", .{i}));
                         continue;
                     }
                 } else {
-                    try errors.append(b.fmt("artifact[{}]: unable to get resolved target from artifact", .{i}));
+                    try errors.append(b.allocator, b.fmt("artifact[{}]: unable to get resolved target from artifact", .{i}));
                 }
             }
         }

@@ -84,18 +84,18 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
     const jdk_path = path_search.findJDK(b.allocator) catch @panic("OOM");
 
     // Validate
-    var errors = std.ArrayList([]const u8).init(b.allocator);
-    defer errors.deinit();
+    var errors = std.ArrayListUnmanaged([]const u8).empty;
+    defer errors.deinit(b.allocator);
 
     if (jdk_path.len == 0) {
-        errors.append(
+        errors.append(b.allocator,
             \\JDK not found.
             \\- Download it from https://www.oracle.com/th/java/technologies/downloads/
             \\- Then configure your JDK_HOME environment variable to where you've installed it.
         ) catch @panic("OOM");
     }
     if (android_sdk_path.len == 0) {
-        errors.append(
+        errors.append(b.allocator,
             \\Android SDK not found.
             \\- Download it from https://developer.android.com/studio
             \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
@@ -120,14 +120,14 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
                             cmdline_tools,
                             tools,
                         });
-                        errors.append(message) catch @panic("OOM");
+                        errors.append(b.allocator, message) catch @panic("OOM");
                     },
                     else => {
                         const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
                             @errorName(toolerr),
                             tools,
                         });
-                        errors.append(message) catch @panic("OOM");
+                        errors.append(b.allocator, message) catch @panic("OOM");
                     },
                 };
             },
@@ -136,7 +136,7 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
                     @errorName(cmderr),
                     cmdline_tools,
                 });
-                errors.append(message) catch @panic("OOM");
+                errors.append(b.allocator, message) catch @panic("OOM");
             },
         };
         break :cmdlineblk cmdline_tools;
