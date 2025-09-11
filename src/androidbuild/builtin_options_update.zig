@@ -43,13 +43,9 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
 
     const package_name_path = builtin_options_update.package_name_stdout.getPath3(b, step);
 
-    // NOTE(jae): 2025-07-23
-    // As of Zig 0.15.0-dev.1092+d772c0627, package_name_path.openFile("") is not possible as it assumes you're appending *something*
-    const file = try package_name_path.root_dir.handle.openFile(package_name_path.sub_path, .{});
-
     // Read package name from stdout and strip line feed / carriage return
     // ie. "com.zig.sdl2\n\r"
-    const package_name_filedata = try file.readToEndAlloc(b.allocator, 8192);
+    const package_name_filedata = try package_name_path.root_dir.handle.readFileAlloc(b.allocator, package_name_path.sub_path, 8192);
     const package_name_stripped = std.mem.trimRight(u8, package_name_filedata, " \r\n");
     const package_name: [:0]const u8 = try b.allocator.dupeZ(u8, package_name_stripped);
 

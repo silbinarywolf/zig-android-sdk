@@ -41,13 +41,13 @@ jobs:
     # Stable Zig Builds
     #
 
-    - name: Setup Zig Stable (0.14.0)
+    - name: Setup Zig Stable (0.15.1)
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
       # see: https://ziglang.org/news/migrate-to-self-hosting/
       uses: mlugg/setup-zig@v2
       with:
-        version: "0.14.0"
+        version: "0.15.1"
 
     - name: Build Minimal Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
@@ -93,6 +93,25 @@ jobs:
     #       adb install ./zig-out/bin/sdl-zig-demo.apk
     #       adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 --throttle 1000 -v 2
     #     working-directory: examples/sdl2
+
+    #
+    # Previous Stable Zig Build
+    #
+
+    - name: Setup Zig Previous Stable (0.14.0)
+      uses: mlugg/setup-zig@v2
+      with:
+        version: "0.14.0"
+
+    - name: Build Minimal Example (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/minimal
+
+    - name: Build SDL2 Example (Zig Stable)
+      run: |
+        zig build -Dandroid=true --verbose
+        zig build -Dandroid=true -Dcrash-on-exception --verbose
+      working-directory: examples/sdl2
 
     #
     # Nightly Zig Builds
