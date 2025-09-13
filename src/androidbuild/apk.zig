@@ -444,7 +444,11 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
 
         // Add module
-        artifact.root_module.addImport("android_builtin", android_builtin);
+        // - If a module has no `root_source_file` (e.g you're only compiling C files using `addCSourceFiles`)
+        //   then adding an import module will cause a build error (as of Zig 0.15.1).
+        if (artifact.root_module.root_source_file != null) {
+            artifact.root_module.addImport("android_builtin", android_builtin);
+        }
 
         var modules_it = artifact.root_module.import_table.iterator();
         while (modules_it.next()) |entry| {
