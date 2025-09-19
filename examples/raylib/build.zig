@@ -57,6 +57,13 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
                 .android_api_version = @as([]const u8, b.fmt("{}", .{@intFromEnum(apk.api_level)})),
                 .android_ndk = @as([]const u8, apk.ndk.path),
+                // NOTE(jae): 2025-09-19
+                // Avoid compilation errors on Linux systems that don't have 'wayland-scanner'
+                // ie.
+                // $ zig build -Dandroid=true --verbose
+                //   `wayland-scanner` may not be installed on the system.
+                //   You can switch to X11 in your `build.zig` by changing `Options.linux_display_backend`
+                .linux_display_backend = .X11, // Avoid build issues on Linux systems
             })
         else
             b.dependency("raylib_zig", .{
