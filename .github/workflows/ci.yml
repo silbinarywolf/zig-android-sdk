@@ -35,7 +35,9 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456'
+        # 29.0.0 = Android 10 (Used by Oculus Quest 2)
+        # 35.0.0 = Android 15
+        packages: 'tools platform-tools platforms;android-35 build-tools;29.0.0 ndk;35.0.0 ndk;29.0.13113456'
 
     #
     # Stable Zig Builds
