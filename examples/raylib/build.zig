@@ -37,13 +37,18 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         });
         const lib = b.addLibrary(.{
             .linkage = .dynamic,
             .name = exe_name,
             .root_module = lib_mod,
+            // note(jae): 2025-09-19
+            // Force use_llvm = true, to workaround issue in Zig 0.15.1 where an error occurs with
+            // - step: compile lib raylib Debug x86_64-linux-android failure
+            //     panic: "TODO unhandled compression scheme"
+            .use_llvm = if (target.result.abi.isAndroid()) true else null,
         });
-        lib.linkLibC();
         b.installArtifact(lib);
 
         const raylib_dep = if (android_apk) |apk|
@@ -61,14 +66,14 @@ pub fn build(b: *std.Build) void {
             });
 
         const raylib_artifact = raylib_dep.artifact("raylib");
-        lib.linkLibrary(raylib_artifact);
+        lib.root_module.linkLibrary(raylib_artifact);
         const raylib_mod = raylib_dep.module("raylib");
         lib.root_module.addImport("raylib", raylib_mod);
 
         if (android_apk) |apk| {
             const android_dep = b.dependency("android", .{
-                .optimize = optimize,
                 .target = target,
+                .optimize = optimize,
             });
             lib.root_module.addImport("android", android_dep.module("android"));
             lib.root_module.linkSystemLibrary("android", .{});
