@@ -47,6 +47,7 @@ android_manifest: ?LazyPath,
 artifacts: std.ArrayListUnmanaged(*Step.Compile),
 java_files: std.ArrayListUnmanaged(LazyPath),
 resources: std.ArrayListUnmanaged(Resource),
+assets: std.ArrayListUnmanaged(LazyPath),
 
 pub const Options = struct {
     /// ie. "35.0.0"
@@ -92,6 +93,7 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
         .artifacts = .empty,
         .java_files = .empty,
         .resources = .empty,
+        .assets = .empty,
     };
     return apk;
 }
@@ -114,6 +116,13 @@ pub fn addResourceDirectory(apk: *Apk, dir: LazyPath) void {
             .source = dir,
         },
     }) catch @panic("OOM");
+}
+
+/// Set the directory of your Android assets folder.
+/// - assets/MyImage.png
+pub fn addAssetsDirectory(apk: *Apk, dir: LazyPath) void {
+    const b = apk.b;
+    apk.assets.append(b.allocator, dir) catch @panic("OOM");
 }
 
 /// Add artifact to the Android build, this should be a shared library (*.so)
@@ -344,14 +353,12 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         aapt2link.addArg("-o");
         const resources_apk_file = aapt2link.addOutputFileArg("resources.apk");
 
-        // TODO(jae): 2024-09-17
-        // Add support for asset directories
-        // Additional directory
-        // aapt.step.dependOn(&resource_write_files.step);
-        // for (app_config.asset_directories) |dir| {
-        //     make_unsigned_apk.addArg("-A"); // additional directory in which to find raw asset files
-        //     make_unsigned_apk.addArg(sdk.b.pathFromRoot(dir));
-        // }
+        for (apk.assets.items) |dir| {
+            aapt2link.addArg("-A"); // additional directory in which to find raw asset files
+            const val = dir.src_path.sub_path;
+
+            aapt2link.addArg(val);
+        }
 
         // Add resource files
         for (apk.resources.items) |resource| {
