@@ -116,9 +116,10 @@ jobs:
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
-    - name: Build Raylib Example (Zig Stable)
-      run: zig build -Dandroid=true --verbose
-      working-directory: examples/raylib
+    # "Raylib requires zig version 0.15.1" error occurs
+    # - name: Build Raylib Example (Zig Previous Stable)
+    #   run: zig build -Dandroid=true --verbose
+    #   working-directory: examples/raylib
 
     #
     # Nightly Zig Builds
