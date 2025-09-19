@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
 
         const android_sdk = android.Sdk.create(b, .{});
         const apk = android_sdk.createApk(.{
-            .api_level = .android10,
+            .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
         });
@@ -37,13 +37,18 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         });
         const lib = b.addLibrary(.{
             .linkage = .dynamic,
             .name = exe_name,
             .root_module = lib_mod,
+            // note(jae): 2025-09-19
+            // Force use_llvm = true, to workaround issue in Zig 0.15.1 where an error occurs with
+            // - step: compile lib raylib Debug x86_64-linux-android failure
+            //     panic: "TODO unhandled compression scheme"
+            .use_llvm = if (target.result.abi.isAndroid()) true else null,
         });
-        lib.linkLibC();
         b.installArtifact(lib);
 
         const raylib_dep = if (android_apk) |apk|
@@ -52,23 +57,30 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
                 .android_api_version = @as([]const u8, b.fmt("{}", .{@intFromEnum(apk.api_level)})),
                 .android_ndk = @as([]const u8, apk.ndk.path),
+                // NOTE(jae): 2025-09-19
+                // Avoid compilation errors on Linux systems that don't have 'wayland-scanner'
+                // ie.
+                // $ zig build -Dandroid=true --verbose
+                //   `wayland-scanner` may not be installed on the system.
+                //   You can switch to X11 in your `build.zig` by changing `Options.linux_display_backend`
+                .linux_display_backend = .X11, // Avoid build issues on Linux systems
             })
         else
             b.dependency("raylib_zig", .{
                 .target = target,
                 .optimize = optimize,
-                .shared = true,
+                .linkage = std.builtin.LinkMode.dynamic,
             });
 
         const raylib_artifact = raylib_dep.artifact("raylib");
-        lib.linkLibrary(raylib_artifact);
+        lib.root_module.linkLibrary(raylib_artifact);
         const raylib_mod = raylib_dep.module("raylib");
         lib.root_module.addImport("raylib", raylib_mod);
 
         if (android_apk) |apk| {
             const android_dep = b.dependency("android", .{
-                .optimize = optimize,
                 .target = target,
+                .optimize = optimize,
             });
             lib.root_module.addImport("android", android_dep.module("android"));
             lib.root_module.linkSystemLibrary("android", .{});
@@ -78,7 +90,7 @@ pub fn build(b: *std.Build) void {
             lib.root_module.addIncludePath(native_app_glue_dir);
             apk.addArtifact(lib);
         } else {
-            const exe = b.addExecutable(.{ .name = exe_name, .optimize = optimize, .root_module = lib_mod });
+            const exe = b.addExecutable(.{ .name = exe_name, .root_module = lib_mod });
             b.installArtifact(exe);
 
             const run_exe = b.addRunArtifact(exe);

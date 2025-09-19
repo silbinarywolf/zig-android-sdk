@@ -35,6 +35,7 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
+        # 35.0.0 = Android 15
         packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456'
 
     #
@@ -58,6 +59,10 @@ jobs:
         zig build -Dandroid=true --verbose
         zig build -Dandroid=true -Dcrash-on-exception --verbose
       working-directory: examples/sdl2
+    
+    - name: Build Raylib Example (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/raylib
 
     # TODO(jae): 2025-03-30
     # Need to figure out how to get 'adb shell monkey' to return an error code or be able to return an error code
@@ -111,6 +116,11 @@ jobs:
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
+    # "Raylib requires zig version 0.15.1" error occurs
+    # - name: Build Raylib Example (Zig Previous Stable)
+    #   run: zig build -Dandroid=true --verbose
+    #   working-directory: examples/raylib
+
     #
     # Nightly Zig Builds
     #
@@ -127,3 +137,7 @@ jobs:
     - name: Build SDL2 Example (Zig Nightly)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
+
+    - name: Build Raylib Example (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/raylib

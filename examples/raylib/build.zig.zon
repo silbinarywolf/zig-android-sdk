@@ -6,8 +6,8 @@
     .dependencies = .{
         .android = .{ .path = "../.." },
         .raylib_zig = .{
-            .url = "git+https://github.com/not-nik/raylib-zig#5013830647196ba938a3a25a36b8245606e9a9cd",
-            .hash = "raylib_zig-5.6.0-dev-KE8REM0tBQAHVn9Xjqlgu9l1qgfTmP8aJa1kLhD584bV",
+            .url = "git+https://github.com/raylib-zig/raylib-zig#d64fc43f38949231dc7d6f1c016db8fcae858b8c",
+            .hash = "raylib_zig-5.6.0-dev-KE8REDc2BQCri1t11guC1tZA-Luc7NuVeml_59LSELLe",
         },
     },
     .paths = .{
