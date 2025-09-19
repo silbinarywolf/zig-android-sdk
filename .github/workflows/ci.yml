@@ -58,6 +58,10 @@ jobs:
         zig build -Dandroid=true --verbose
         zig build -Dandroid=true -Dcrash-on-exception --verbose
       working-directory: examples/sdl2
+    
+    - name: Build Raylib Example (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/raylib
 
     # TODO(jae): 2025-03-30
     # Need to figure out how to get 'adb shell monkey' to return an error code or be able to return an error code
@@ -111,6 +115,10 @@ jobs:
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
+    - name: Build Raylib Example (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/raylib
+
     #
     # Nightly Zig Builds
     #
@@ -127,3 +135,7 @@ jobs:
     - name: Build SDL2 Example (Zig Nightly)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
+
+    - name: Build Raylib Example (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/raylib

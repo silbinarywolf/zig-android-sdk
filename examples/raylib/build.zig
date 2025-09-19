@@ -57,7 +57,7 @@ pub fn build(b: *std.Build) void {
             b.dependency("raylib_zig", .{
                 .target = target,
                 .optimize = optimize,
-                .shared = true,
+                .linkage = std.builtin.LinkMode.dynamic,
             });
 
         const raylib_artifact = raylib_dep.artifact("raylib");
@@ -78,7 +78,7 @@ pub fn build(b: *std.Build) void {
             lib.root_module.addIncludePath(native_app_glue_dir);
             apk.addArtifact(lib);
         } else {
-            const exe = b.addExecutable(.{ .name = exe_name, .optimize = optimize, .root_module = lib_mod });
+            const exe = b.addExecutable(.{ .name = exe_name, .root_module = lib_mod });
             b.installArtifact(exe);
 
             const run_exe = b.addRunArtifact(exe);
