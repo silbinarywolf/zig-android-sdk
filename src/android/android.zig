@@ -1,10 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-// TODO(jae): 2024-10-03
-// Consider exposing this in the future
-// pub const builtin = android_builtin;
-
 const android_builtin = struct {
     const ab = @import("android_builtin");
 
