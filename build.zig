@@ -1,8 +1,6 @@
 const std = @import("std");
 const androidbuild = @import("src/androidbuild/androidbuild.zig");
 
-// Expose Android build functionality for use in your build.zig
-
 // TODO: rename tools.zig to Sdk.zig
 pub const Sdk = @import("src/androidbuild/tools.zig");
 pub const Apk = @import("src/androidbuild/apk.zig");

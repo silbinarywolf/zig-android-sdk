@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
         apk.setKeyStore(key_store_file);
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
         apk.addResourceDirectory(b.path("android/res"));
+        apk.addAssetsDirectory(b.path("android/assets"));
 
         // Add Java files
         // - If you have 'android:hasCode="false"' in your AndroidManifest.xml then no Java files are required

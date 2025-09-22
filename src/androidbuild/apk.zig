@@ -358,6 +358,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             const val = dir.src_path.sub_path;
 
             aapt2link.addArg(val);
+            //aapt2link.addFileInput(dir);
         }
 
         // Add resource files
