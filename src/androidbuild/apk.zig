@@ -770,7 +770,7 @@ fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8
                         // Update libraries linked to this library
                         apk.updateLinkObjects(artifact, so_dir, raw_top_level_apk_files);
 
-                        // Apply workaround for Zig 0.14.0
+                        // Apply workaround for Zig 0.14.0 and Zig 0.15.X
                         apk.applyLibLinkCppWorkaroundIssue19(artifact);
                     },
                     else => continue,
@@ -805,6 +805,11 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
     const libcppabi_dir = libcpp_workaround.addCopyFile(lib_path, "libc++abi_zig_workaround.a").dirname();
 
     artifact.root_module.addLibraryPath(libcppabi_dir);
+
+    // NOTE(jae): 2025-11-18
+    // Due to Android include files not being provided by Zig, we should provide them if the library is linking against C++
+    // This resolves an issue where if you are trying to build the openxr_loader C++ code from source, it can't find standard library includes like <string> or <algorithm>
+    artifact.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/c++/v1", .{apk.ndk.sysroot_path}) });
 
     if (artifact.root_module.link_libcpp == true) {
         // NOTE(jae): 2025-04-06
