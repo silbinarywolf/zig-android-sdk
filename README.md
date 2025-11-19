@@ -53,7 +53,7 @@ Option A. Install with package manager
 zig fetch --save https://github.com/silbinarywolf/zig-android-sdk/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz"
 ```
 
-Option B. Copy-paste the dependency into your project directly. This is recommended if you want to easily hack on it or tweak it.
+Option B. Copy-paste the dependency into your project directly and put in a `third-party` folder. This is recommended if you want to easily hack on it or tweak it.
 ```zig
 .{
     .name = .yourzigproject,
@@ -63,7 +63,6 @@ Option B. Copy-paste the dependency into your project directly. This is recommen
         },
     },
 }
-
 ```
 
 ## Examples
