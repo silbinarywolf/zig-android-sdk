@@ -48,17 +48,22 @@ pub fn build(b: *std.Build) !void {
 
 ## Installation
 
-Add the following to your build.zig.zon file and run `zig build`.
+Option A. Install with package manager
+```sh
+zig fetch --save https://github.com/silbinarywolf/zig-android-sdk/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz"
+```
 
+Option B. Copy-paste the dependency into your project directly. This is recommended if you want to easily hack on it or tweak it.
 ```zig
 .{
+    .name = .yourzigproject,
     .dependencies = .{
         .android = .{
-            .path = "https://github.com/silbinarywolf/zig-android-sdk/archive/REPLACE_WITH_WANTED_COMMIT.tar.gz",
-            // .hash = REPLACE_WITH_HASH_FROM_BUILD_ERROR
+            .path = "third-party/zig-android-sdk",
         },
     },
 }
+
 ```
 
 ## Examples
