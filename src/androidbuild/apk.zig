@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 const Sdk = @import("tools.zig");
 const BuiltinOptionsUpdate = @import("builtin_options_update.zig");
@@ -394,7 +395,11 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         });
         aapt2packagename.setName(runNameContext("aapt2 dump packagename"));
         aapt2packagename.addFileArg(resources_apk);
-        break :blk aapt2packagename.captureStdOut();
+        const aapt2_package_name_file = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            aapt2packagename.captureStdOut()
+        else
+            keytool.captureStdOut(.{});
+        break :blk aapt2_package_name_file;
     };
 
     const android_builtin = blk: {
