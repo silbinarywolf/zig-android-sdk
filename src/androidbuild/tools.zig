@@ -313,7 +313,10 @@ pub fn createKeyStore(sdk: *const Sdk, options: CreateKey) KeyStore {
     // ignore stderr, it just gives you an output like:
     // "Generating 4,096 bit RSA key pair and self-signed certificate (SHA384withRSA) with a validity of 10,000 days
     // for: CN=example.com, OU=ID, O=Example, L=Doe, ST=Jane, C=GB"
-    _ = keytool.captureStdErr();
+    _ = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        keytool.captureStdErr()
+    else
+        keytool.captureStdErr(.{});
     return .{
         .file = keystore_file,
         .password = options.password,
