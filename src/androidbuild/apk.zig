@@ -398,7 +398,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         const aapt2_package_name_file = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
             aapt2packagename.captureStdOut()
         else
-            keytool.captureStdOut(.{});
+            aapt2packagename.captureStdOut(.{});
         break :blk aapt2_package_name_file;
     };
 
