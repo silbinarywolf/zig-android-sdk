@@ -93,7 +93,7 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
         errors.append(b.allocator,
             \\Android SDK not found.
             \\- Download it from https://developer.android.com/studio
-            \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
+            \\- Then configure your ANDROID_HOME environment variable to where you've installed it.
         ) catch @panic("OOM");
     }
     if (errors.items.len > 0) {
