@@ -78,7 +78,7 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
         ndk.validateApiLevel(b, options.api_level, &errors);
     }
     if (errors.items.len > 0) {
-        printErrorsAndExit("unable to find required Android installation", errors.items);
+        printErrorsAndExit(sdk.b, "unable to find required Android installation", errors.items);
     }
 
     const apk: *Apk = b.allocator.create(Apk) catch @panic("OOM");
@@ -261,7 +261,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         //     try errors.append(b.fmt("must add at least one Java file to build OR you must setup your AndroidManifest.xml to have 'android:hasCode=false'", .{}));
         // }
         if (errors.items.len > 0) {
-            printErrorsAndExit("misconfigured Android APK", errors.items);
+            printErrorsAndExit(apk.b, "misconfigured Android APK", errors.items);
         }
     }
 
@@ -503,7 +503,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             }
             apk.setLibCFile(artifact);
             apk.addLibraryPaths(artifact.root_module);
-            artifact.linkLibC();
+            artifact.root_module.link_libc = true;
 
             // Apply workaround for Zig 0.14.0 stable
             //
@@ -814,7 +814,7 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
     // NOTE(jae): 2025-11-18
     // Due to Android include files not being provided by Zig, we should provide them if the library is linking against C++
     // This resolves an issue where if you are trying to build the openxr_loader C++ code from source, it can't find standard library includes like <string> or <algorithm>
-    artifact.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/c++/v1", .{apk.ndk.sysroot_path}) });
+    artifact.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/c++/v1", .{apk.ndk.sysroot_path}) });
 
     if (artifact.root_module.link_libcpp == true) {
         // NOTE(jae): 2025-04-06

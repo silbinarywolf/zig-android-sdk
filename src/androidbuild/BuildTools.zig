@@ -2,6 +2,7 @@
 //! - $ANDROID_HOME/build-tools/35.0.0
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 aapt2: []const u8,
@@ -33,7 +34,11 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, build_tools_version: []
 
     // Check if build tools path is accessible
     // ie. $ANDROID_HOME/build-tools/35.0.0
-    std.fs.accessAbsolute(build_tools_path, .{}) catch |err| switch (err) {
+    const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        std.fs.accessAbsolute(build_tools_path, .{})
+    else
+        std.Io.Dir.accessAbsolute(b.graph.io, build_tools_path, .{});
+    access_wrapped_error catch |err| switch (err) {
         error.FileNotFound => {
             const message = b.fmt("Android Build Tool version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
                 build_tools_version,

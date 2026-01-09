@@ -2,6 +2,7 @@
 //! - $ANDROID_HOME/ndk/29.0.13113456
 
 const std = @import("std");
+const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 
 const Allocator = std.mem.Allocator;
@@ -34,7 +35,11 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
     const android_ndk_path = b.fmt("{s}/ndk/{s}", .{ android_sdk_path, ndk_version });
 
     const has_ndk: bool = blk: {
-        std.fs.accessAbsolute(android_ndk_path, .{}) catch |err| switch (err) {
+        const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            std.fs.accessAbsolute(android_ndk_path, .{})
+        else
+            std.Io.Dir.accessAbsolute(b.graph.io, android_ndk_path, .{});
+        access_wrapped_error catch |err| switch (err) {
             error.FileNotFound => {
                 const message = b.fmt("Android NDK version '{s}' not found. Install it via 'sdkmanager' or Android Studio.", .{
                     ndk_version,
@@ -76,7 +81,11 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, ndk_version: []const u8
 
     // Check if NDK sysroot path is accessible
     const has_ndk_sysroot = blk: {
-        std.fs.accessAbsolute(ndk_sysroot, .{}) catch |err| switch (err) {
+        const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            std.fs.accessAbsolute(ndk_sysroot, .{})
+        else
+            std.Io.Dir.accessAbsolute(b.graph.io, ndk_sysroot, .{});
+        access_wrapped_error catch |err| switch (err) {
             error.FileNotFound => {
                 const message = b.fmt("Android NDK sysroot '{s}' had unexpected error. Missing at '{s}'", .{
                     ndk_version,
@@ -121,7 +130,12 @@ pub fn validateApiLevel(ndk: *const Ndk, b: *std.Build, api_level: ApiLevel, err
         // "x86" has existed since Android 4.1 (API version 16)
         const x86_system_target = "i686-linux-android";
         const ndk_sysroot_target_api_version = b.fmt("{s}/usr/lib/{s}/{d}", .{ ndk.sysroot_path, x86_system_target, @intFromEnum(api_level) });
-        std.fs.accessAbsolute(ndk_sysroot_target_api_version, .{}) catch |err| switch (err) {
+
+        const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            std.fs.accessAbsolute(ndk_sysroot_target_api_version, .{})
+        else
+            std.Io.Dir.accessAbsolute(b.graph.io, ndk_sysroot_target_api_version, .{});
+        access_wrapped_error catch |err| switch (err) {
             error.FileNotFound => {
                 const message = b.fmt("Android NDK version '{s}' does not support API Level {d}. No folder at '{s}'", .{
                     ndk.version,
@@ -154,7 +168,11 @@ pub fn validateApiLevel(ndk: *const Ndk, b: *std.Build, api_level: ApiLevel, err
             b.fmt("android-{d}", .{@intFromEnum(api_level)}),
             "android.jar",
         });
-        std.fs.accessAbsolute(root_jar, .{}) catch |err| switch (err) {
+        const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            std.fs.accessAbsolute(root_jar, .{})
+        else
+            std.Io.Dir.accessAbsolute(b.graph.io, root_jar, .{});
+        access_wrapped_error catch |err| switch (err) {
             error.FileNotFound => {
                 const message = b.fmt("Android API level {d} not installed. Unable to find '{s}'", .{
                     @intFromEnum(api_level),

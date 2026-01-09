@@ -64,12 +64,22 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
 
     // NOTE(jae): 2025-07-23
     // As of Zig 0.15.0-dev.1092+d772c0627, package_name_path.openDir("") is not possible as it assumes you're appending a sub-path
-    var dir = try search_dir.root_dir.handle.openDir(search_dir.sub_path, .{ .iterate = true });
-    defer dir.close();
+    var dir = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        try search_dir.root_dir.handle.openDir(search_dir.sub_path, .{ .iterate = true })
+    else
+        try search_dir.root_dir.handle.openDir(b.graph.io, search_dir.sub_path, .{ .iterate = true });
+    defer if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        dir.close()
+    else
+        dir.close(b.graph.io);
 
     var walker = try dir.walk(arena);
     defer walker.deinit();
-    while (try walker.next()) |entry| {
+    while (if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        try walker.next()
+    else
+        try walker.next(b.graph.io)) |entry|
+    {
         if (entry.kind != .file) {
             continue;
         }
