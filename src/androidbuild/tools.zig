@@ -123,6 +123,7 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
                     errors.append(b.allocator, message) catch @panic("OOM");
                 },
             };
+            break :cmdlineblk cmdline_tools_path;
         }
         // If unable to find command line tools, return empty
         break :cmdlineblk &[0]u8{};
