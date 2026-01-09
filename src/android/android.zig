@@ -445,7 +445,7 @@ const Panic = struct {
             },
         };
 
-        posix.abort();
+        @trap();
     }
 
     fn dumpStackTrace(stack_trace: std.builtin.StackTrace) void {
