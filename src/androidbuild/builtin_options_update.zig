@@ -52,7 +52,10 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
         try package_name_path.root_dir.handle.readFile(package_name_path.sub_path, package_name_backing_buf)
     else
         try package_name_path.root_dir.handle.readFile(b.graph.io, package_name_path.sub_path, package_name_backing_buf);
-    const package_name_stripped = std.mem.trimEnd(u8, package_name_filedata, " \r\n");
+    const package_name_stripped = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+        std.mem.trimRight(u8, package_name_filedata, " \r\n")
+    else
+        std.mem.trimEnd(u8, package_name_filedata, " \r\n");
     const package_name: [:0]const u8 = try b.allocator.dupeZ(u8, package_name_stripped);
 
     options.addOption([:0]const u8, "package_name", package_name);
