@@ -375,7 +375,10 @@ pub fn createOrGetLibCFile(sdk: *Sdk, compile: *Step.Compile, android_api_level:
 /// Caller must free returned memory
 fn getAndroidSDKPath(b: *std.Build) error{OutOfMemory}![]const u8 {
     const allocator = b.allocator;
-    const environ_map = &b.graph.environ_map;
+    const environ_map = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        &b.graph.env_map
+    else
+        &b.graph.environ_map;
 
     if (environ_map.get("ANDROID_HOME")) |android_home| if (android_home.len > 0)
         return android_home;
@@ -505,7 +508,10 @@ const PathSearch = struct {
 
     pub fn init(b: *std.Build, host_os_tag: std.Target.Os.Tag) error{ EnvironmentVariableNotFound, OutOfMemory }!PathSearch {
         const allocator = b.allocator;
-        const environ_map = &b.graph.environ_map;
+        const environ_map = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            &b.graph.env_map
+        else
+            &b.graph.environ_map;
 
         const path_env = environ_map.get("PATH") orelse return error.EnvironmentVariableNotFound;
         if (path_env.len == 0) {
