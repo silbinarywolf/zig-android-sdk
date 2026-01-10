@@ -8,13 +8,15 @@
 //! 09-22 13:08:49.637  3390  3390 F com.zig.minimal: ???:?:?: 0x7ccea4021d9c in ??? (libandroid_runtime.so)
 
 const std = @import("std");
-const android = @import("android");
 const builtin = @import("builtin");
+const Logger = @import("Logger.zig");
+
+const package_name = @import("android_builtin").package_name;
+
 const LogWriter_Zig014 = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
     @import("zig014").LogWriter
 else
     void;
-const Logger = android.Logger;
 
 /// Non-zero whenever the program triggered a panic.
 /// The counter is incremented/decremented atomically.
@@ -134,7 +136,7 @@ fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
                 if (builtin.single_threaded) {
                     _ = ndk.__android_log_print(
                         @intFromEnum(Logger.Level.fatal),
-                        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
+                        comptime if (package_name.len == 0) null else package_name.ptr,
                         "panic: %.*s",
                         msg.len,
                         msg.ptr,
@@ -143,7 +145,7 @@ fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
                     const current_thread_id: u32 = std.Thread.getCurrentId();
                     _ = ndk.__android_log_print(
                         @intFromEnum(Logger.Level.fatal),
-                        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
+                        comptime if (package_name.len == 0) null else package_name.ptr,
                         "thread %d panic: %.*s",
                         current_thread_id,
                         msg.len,
@@ -225,7 +227,7 @@ fn dumpCurrentStackTrace_014(start_addr: ?usize) void {
 fn android_fatal_log(message: [:0]const u8) void {
     _ = ndk.__android_log_write(
         @intFromEnum(Logger.Level.fatal),
-        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
+        comptime if (package_name.len == 0) null else package_name.ptr,
         message,
     );
 }
@@ -236,7 +238,7 @@ fn android_fatal_print_c_string(
 ) void {
     _ = ndk.__android_log_print(
         @intFromEnum(Logger.Level.fatal),
-        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
+        comptime if (package_name.len == 0) null else package_name.ptr,
         fmt,
         c_str.ptr,
     );

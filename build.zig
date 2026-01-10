@@ -35,7 +35,7 @@ pub fn build(b: *std.Build) void {
     });
     if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
         // Add as a module to deal with @Type(.enum_literal) being deprecated
-        module.addImport("zig014", b.addModule("zig014", .{
+        module.addImport("zig014", b.createModule(.{
             .root_source_file = b.path("src/android/zig014/zig014.zig"),
             .target = target,
             .optimize = optimize,
@@ -43,23 +43,21 @@ pub fn build(b: *std.Build) void {
     }
     if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
         // Add as a module to deal with @Type(.enum_literal) being deprecated
-        var zig015 = b.addModule("zig015", .{
+        const zig015 = b.createModule(.{
             .root_source_file = b.path("src/android/zig015/zig015.zig"),
             .target = target,
             .optimize = optimize,
         });
         module.addImport("zig015", zig015);
-        zig015.addImport("android", zig015);
     }
     if (builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16) {
         // Add as a module to deal with @Type(.enum_literal) being deprecated
-        var zig016 = b.addModule("zig016", .{
+        const zig016 = b.createModule(.{
             .root_source_file = b.path("src/android/zig016/zig016.zig"),
             .target = target,
             .optimize = optimize,
         });
         module.addImport("zig016", zig016);
-        zig016.addImport("android", zig016);
     }
 
     // Create stub of builtin options.

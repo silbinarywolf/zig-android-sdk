@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const android = @import("android");
 const rl = @import("raylib");
 
-pub fn main() void {
+pub fn main() !void {
     const screenWidth = 800;
     const screenHeight = 450;
     rl.initWindow(screenWidth, screenHeight, "raylib-zig [core] example - basic window");

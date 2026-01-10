@@ -9,7 +9,7 @@ const Logger = @import("Logger.zig");
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
-    std.debug.FullPanic(zig015.Panic.panic)
+    std.debug.FullPanic(@import("Zig015_Panic.zig").panic)
 else
     @compileError("Android panic handler is no longer maintained as of Zig 0.16.x-dev");
 
