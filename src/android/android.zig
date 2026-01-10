@@ -1,5 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const LogWriter_Zig014 = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+    @import("LogWriter_Zig014")
+else
+    void;
 
 // TODO(jae): 2024-10-03
 // Consider exposing this in the future
@@ -70,7 +74,7 @@ pub const Level = enum(u8) {
 
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-    @import("LogWriter_Zig014.zig").logFn
+    LogWriter_Zig014.logFn
 else
     AndroidLog.logFn;
 
@@ -262,14 +266,12 @@ const Panic = struct {
         var android_log_writer_mutex = std.Thread.Mutex.Recursive.init;
 
         var android_panic_log_writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            @import("LogWriter_Zig014.zig"){
-                .level = .fatal,
-            }
+            LogWriter_Zig014{ .level = .fatal }
         else
             AndroidLog.init(.fatal, &android_log_writer_buffer);
 
         fn lockAndroidLogWriter() if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            std.io.GenericWriter(*@import("LogWriter_Zig014.zig"), @import("LogWriter_Zig014.zig").Error, @import("LogWriter_Zig014.zig").write)
+            std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write)
         else
             *std.Io.Writer {
             android_log_writer_mutex.lock();

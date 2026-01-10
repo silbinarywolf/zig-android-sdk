@@ -12,7 +12,7 @@ line_buffer: [8192]u8 = undefined,
 line_len: usize = 0,
 
 const Error = error{};
-const Writer = std.io.Writer(*@This(), Error, write);
+const Writer = std.io.Writer(*LogWriter_Zig014, Error, write);
 
 const log_tag: [:0]const u8 = @import("android_builtin").package_name;
 
@@ -26,7 +26,7 @@ fn logFn(
     // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
     // So we don't do that here.
     const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
-    var androidLogWriter = comptime @This(){
+    var androidLogWriter = comptime LogWriter_Zig014{
         .level = switch (message_level) {
             //  => .ANDROID_LOG_VERBOSE, // No mapping
             .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,

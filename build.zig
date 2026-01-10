@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const androidbuild = @import("src/androidbuild/androidbuild.zig");
 
 // Expose Android build functionality for use in your build.zig
@@ -32,6 +33,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14) {
+        // Add as a module to deal with @Type(.enum_literal) being deprecated
+        module.addImport("LogWriter_Zig014", b.addModule("android", .{
+            .root_source_file = b.path("src/android/LogWriter_Zig014.zig"),
+            .target = target,
+            .optimize = optimize,
+        }));
+    }
 
     // Create stub of builtin options.
     // This is discovered and then replaced by "Apk" in the build process
