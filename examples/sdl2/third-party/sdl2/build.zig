@@ -170,6 +170,16 @@ pub fn build(b: *std.Build) !void {
         // error: nullability specifier cannot be applied to non-pointer type 'unsigned short [3]'
         // in: ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/stdlib.h:163
         sdl_c_module.defineCMacro("_Nonnull", "");
+
+        // NOTE(jae): 2026-01-10
+        // Resolve issue in Zig 0.16.X at least, where ARM_NEON_H causes issues when building SDL2
+        // for Android.
+        //
+        // error:  expected ')', found 'an identifier'
+        // in: lib/include/arm_neon.h:74025:73: error: expected ')', found 'an identifier'
+        if (target.result.cpu.arch == .aarch64) {
+            sdl_c_module.defineCMacro("__ARM_NEON_H", "1");
+        }
     }
 
     _ = b.addModule("sdl", .{
