@@ -542,10 +542,12 @@ const PathSearch = struct {
                 //     &b.graph.environ_map;
                 const maybe_user: ?[]const u8 = environ_map.get("USER") orelse null;
                 if (maybe_user) |user| {
-                    const java = b.findProgram(&.{"jarsigner"}, &.{
+                    const jarsigner_path = b.findProgram(&.{"jarsigner"}, &.{
                         b.fmt("/home/{s}/android-studio/jbr/bin", .{user}),
                     }) catch break :jdkpath null; // TODO: Dont return NULL here
-                    break :jdkpath std.fs.path.dirname(java) orelse null;
+                    const jbr_bin_dir = std.fs.path.dirname(jarsigner_path) orelse break :jdkpath null;
+                    const jbr_dir = std.fs.path.dirname(jbr_bin_dir) orelse break :jdkpath null;
+                    break :jdkpath jbr_dir;
                 }
             }
             break :jdkpath null;

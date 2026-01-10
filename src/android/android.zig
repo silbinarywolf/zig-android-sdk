@@ -4,6 +4,7 @@ const ndk = @import("ndk.zig");
 const Logger = @import("Logger.zig");
 const zig014 = @import("zig014");
 const zig015 = @import("zig015");
+const zig016 = @import("zig016");
 
 // TODO(jae): 2024-10-03
 // Consider exposing this in the future
@@ -31,12 +32,18 @@ pub const Level = Logger.Level;
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
     zig014.LogWriter.logFn
-else
-    androidLogFn;
+else if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+    zig015.wrapLogFn(androidLogFn)
+else if (builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16)
+    zig016.wrapLogFn(androidLogFn);
 
 fn androidLogFn(
     comptime message_level: std.log.Level,
-    comptime scope: @EnumLiteral(), // @Type(.enum_literal),
+    // NOTE(jae): 2026-01-10
+    // Just make our log function here use the precomputed text and get the Zig 0.15.2 and Zig 0.16.x-dev+
+    // implementation to pass in the following:
+    // - const scope_prefix_text = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
+    comptime scope_prefix_text: [:0]const u8,
     comptime format: []const u8,
     args: anytype,
 ) void {
@@ -52,7 +59,7 @@ fn androidLogFn(
     {
         _ = ndk.__android_log_print(
             @intFromEnum(Level.fatal),
-            comptime if (log_tag.len == 0) null else log_tag.ptr,
+            comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
             "%.*s",
             format.len,
             format.ptr,
@@ -69,13 +76,8 @@ fn androidLogFn(
     };
     var buffer: [8192]u8 = undefined;
     var logger = Logger.init(android_log_level, &buffer);
-
-    // NOTE(jae): 2024-09-11
-    // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
-    // So we don't do that here.
-    const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
     nosuspend {
-        logger.writer.print(prefix2 ++ format ++ "\n", args) catch return;
+        logger.writer.print(scope_prefix_text ++ format ++ "\n", args) catch return;
         logger.writer.flush() catch return;
     }
 }

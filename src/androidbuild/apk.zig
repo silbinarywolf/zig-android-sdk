@@ -547,6 +547,17 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         });
         d8.setName(runNameContext("d8"));
 
+        // Prepend JDK bin path so d8 can always find "java", etc
+        if (apk.sdk.jdk_path.len > 0) {
+            var env_map = d8.getEnvMap();
+            const path = env_map.get("PATH") orelse &[0]u8{};
+            const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
+                b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
+                path,
+            });
+            try env_map.put("PATH", new_path);
+        }
+
         // ie. android_sdk/platforms/android-{api-level}/android.jar
         d8.addArg("--lib");
         d8.addArg(root_jar);
@@ -717,6 +728,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             apk.build_tools.apksigner,
             "sign",
         });
+        try apk.updatePathWithJdk(apksigner);
         apksigner.setName(runNameContext("apksigner"));
         apksigner.addArg("--ks"); // ks = keystore
         apksigner.addFileArg(key_store.file);
@@ -907,6 +919,21 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
     // artifact.link_function_sections = true;
     // Seemingly not "needed" anymore, at least for x86_64 Android builds
     // artifact.export_table = true;
+}
+
+/// Prepend JDK bin path so "d8", "apksigner", etc can always find "java"
+fn updatePathWithJdk(apk: *Apk, run: *std.Build.Step.Run) !void {
+    if (apk.sdk.jdk_path.len == 0) return;
+
+    const b = apk.b;
+
+    var env_map = run.getEnvMap();
+    const path = env_map.get("PATH") orelse &[0]u8{};
+    const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
+        b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
+        path,
+    });
+    try env_map.put("PATH", new_path);
 }
 
 const Apk = @This();

@@ -6,8 +6,8 @@ const sdl = @import("sdl");
 const log = std.log;
 const assert = std.debug.assert;
 
-/// custom standard options for Android
-pub const std_options: std.Options = if (builtin.abi.isAndroid())
+// custom standard options for Android
+pub const std_options: std.Options = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     .{
         .logFn = android.logFn,
     }
@@ -15,7 +15,7 @@ else
     .{};
 
 /// custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid())
+pub const panic = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     android.panic
 else
     std.debug.FullPanic(std.debug.defaultPanic);
@@ -26,10 +26,40 @@ comptime {
     }
 }
 
+inline fn wrapMain(result: anytype) u8 {
+    // General error message for a malformed return type
+    const bad_main_ret = "expected return type of main to be 'void', '!void', 'noreturn', 'u8', or '!u8'";
+
+    const ReturnType = @TypeOf(result);
+    switch (ReturnType) {
+        void => return 0,
+        noreturn => unreachable,
+        u8 => return result,
+        else => {},
+    }
+    if (@typeInfo(ReturnType) != .error_union) @compileError(bad_main_ret);
+
+    const unwrapped_result = result catch |err| {
+        std.log.err("{t}", .{err});
+        switch (builtin.os.tag) {
+            .freestanding, .other => {},
+            else => if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace),
+        }
+        return 1;
+    };
+
+    return switch (@TypeOf(unwrapped_result)) {
+        noreturn => unreachable,
+        void => 0,
+        u8 => unwrapped_result,
+        else => @compileError(bad_main_ret),
+    };
+}
+
 /// This needs to be exported for Android builds
 fn SDL_main() callconv(.c) void {
     if (comptime builtin.abi.isAndroid()) {
-        _ = std.start.callMain();
+        _ = wrapMain(main());
     } else {
         @compileError("SDL_main should not be called outside of Android builds");
     }
