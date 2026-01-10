@@ -1,4 +1,5 @@
 //! Panic is a copy-paste of the panic logic from Zig but replaces usages of getStdErr with our own writer
+//! This is deprecated from Zig 0.16.x-dev onwards due to being buggy and hard to maintain.
 //!
 //! Example output (Zig 0.13.0):
 //! 09-22 13:08:49.578  3390  3390 F com.zig.minimal: thread 3390 panic: your panic message here
@@ -219,6 +220,26 @@ fn dumpCurrentStackTrace_014(start_addr: ?usize) void {
             return;
         };
     }
+}
+
+fn android_fatal_log(message: [:0]const u8) void {
+    _ = ndk.__android_log_write(
+        @intFromEnum(Logger.Level.fatal),
+        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
+        message,
+    );
+}
+
+fn android_fatal_print_c_string(
+    comptime fmt: [:0]const u8,
+    c_str: [:0]const u8,
+) void {
+    _ = ndk.__android_log_print(
+        @intFromEnum(Logger.Level.fatal),
+        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
+        fmt,
+        c_str.ptr,
+    );
 }
 
 const ndk = struct {

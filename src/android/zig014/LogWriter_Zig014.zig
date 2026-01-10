@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const Level = @import("android").Level;
+const Level = @import("android").Logger.Level;
 
 level: Level,
 

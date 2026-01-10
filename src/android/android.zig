@@ -18,13 +18,11 @@ const android_builtin = struct {
     pub const package_name: [:0]const u8 = ab.package_name;
 };
 
-const log_tag = Logger.tag;
-
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     std.debug.FullPanic(zig015.Panic.panic)
 else
-    void;
+    @compileError("Android panic handler is no longer maintained as of Zig 0.16.x-dev");
 
 /// Log Levels for Android
 pub const Level = Logger.Level;
@@ -58,7 +56,7 @@ fn androidLogFn(
         comptime std.mem.indexOfScalar(u8, format, '{') == null)
     {
         _ = ndk.__android_log_print(
-            @intFromEnum(Level.fatal),
+            @intFromEnum(Logger.Level.fatal),
             comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
             "%.*s",
             format.len,
@@ -67,7 +65,7 @@ fn androidLogFn(
         return;
     }
 
-    const android_log_level: Level = switch (message_level) {
+    const android_log_level: Logger.Level = switch (message_level) {
         //  => .ANDROID_LOG_VERBOSE, // No mapping
         .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
         .info => .info, // android.ANDROID_LOG_INFO = 4,
@@ -80,24 +78,4 @@ fn androidLogFn(
         logger.writer.print(scope_prefix_text ++ format ++ "\n", args) catch return;
         logger.writer.flush() catch return;
     }
-}
-
-fn android_fatal_log(message: [:0]const u8) void {
-    _ = ndk.__android_log_write(
-        @intFromEnum(Level.fatal),
-        comptime if (log_tag.len == 0) null else log_tag.ptr,
-        message,
-    );
-}
-
-fn android_fatal_print_c_string(
-    comptime fmt: [:0]const u8,
-    c_str: [:0]const u8,
-) void {
-    _ = ndk.__android_log_print(
-        @intFromEnum(Level.fatal),
-        comptime if (log_tag.len == 0) null else log_tag.ptr,
-        fmt,
-        c_str.ptr,
-    );
 }
