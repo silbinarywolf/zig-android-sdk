@@ -5,7 +5,7 @@ const std = @import("std");
 /// Panic is the older Zig 0.14.x and 0.15.x panic handler
 pub const Panic = @import("Panic_Zig014_015.zig");
 
-const LogFunction = fn (comptime message_level: std.log.Level, comptime scope: @EnumLiteral(), comptime format: []const u8, args: anytype) void;
+const LogFunction = fn (comptime message_level: std.log.Level, comptime scope: @Type(.enum_literal), comptime format: []const u8, args: anytype) void;
 
 pub fn wrapLogFn(comptime logFn: fn (
     comptime message_level: std.log.Level,
