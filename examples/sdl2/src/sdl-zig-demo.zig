@@ -7,7 +7,7 @@ const log = std.log;
 const assert = std.debug.assert;
 
 // custom standard options for Android
-pub const std_options: std.Options = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+pub const std_options: std.Options = if (builtin.abi.isAndroid())
     .{
         .logFn = android.logFn,
     }

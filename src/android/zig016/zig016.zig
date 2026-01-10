@@ -2,12 +2,14 @@
 
 const std = @import("std");
 
+const LogFunction = fn (comptime message_level: std.log.Level, comptime scope: @EnumLiteral(), comptime format: []const u8, args: anytype) void;
+
 pub fn wrapLogFn(comptime logFn: fn (
     comptime message_level: std.log.Level,
     comptime scope_prefix_text: [:0]const u8,
     comptime format: []const u8,
     args: anytype,
-) void) @TypeOf(std.options.logFn) {
+) void) LogFunction {
     return struct {
         fn standardLogFn(comptime message_level: std.log.Level, comptime scope: @EnumLiteral(), comptime format: []const u8, args: anytype) void {
             // NOTE(jae): 2024-09-11

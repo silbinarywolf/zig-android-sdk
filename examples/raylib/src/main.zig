@@ -20,7 +20,7 @@ pub fn main() void {
 }
 
 /// custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid())
+pub const panic = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     android.panic
 else
     std.debug.FullPanic(std.debug.defaultPanic);
