@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const Level = @import("android.zig").Level;
+const Level = @import("android").Level;
 
 level: Level,
 

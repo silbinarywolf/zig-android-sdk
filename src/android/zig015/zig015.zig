@@ -1,9 +1,6 @@
 //! Seperate module for Zig 0.15.2 functionality as @Type() comptime directive was removed
 
 const std = @import("std");
-const ndk = @import("../ndk.zig");
-const Logger = @import("../Logger.zig");
-const Level = Logger.Level;
 
 /// Panic is the older Zig 0.14.x and 0.15.x panic handler
 pub const Panic = @import("Panic_Zig014_015.zig");
