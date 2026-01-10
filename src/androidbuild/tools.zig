@@ -388,27 +388,33 @@ fn getAndroidSDKPath(b: *std.Build) error{OutOfMemory}![]const u8 {
     // Check for Android Studio
     switch (builtin.os.tag) {
         .windows => {
+            // NOTE(jae): 2026-01-10
+            // At least as of Android Studio Meerkat (2024.3.1), built on March 13th 2025.
+            // This logic will not do anything on Windows. SdkPath is empty.
+            //
+            // So let's just remove this.
+            //
             // First, see if SdkPath in the registry is set
             // - Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Android Studio - "SdkPath"
             // - Computer\KHEY_CURRENT_USER\SOFTWARE\Android Studio  - "SdkPath"
-            const android_studio_sdk_path: []const u8 = blk: {
-                for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
-                    const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
-                        error.KeyNotFound => continue,
-                    };
-                    // NOTE(jae): 2025-05-25 - build.txt file says "AI-243.24978.46.2431.13208083"
-                    // For my install, "SdkPath" is an empty string, so this may not be used anymore.
-                    const sdk_path = key.getString(allocator, "Android Studio", "SdkPath") catch |err| switch (err) {
-                        error.StringNotFound, error.ValueNameNotFound, error.NotAString => continue,
-                        error.OutOfMemory => return error.OutOfMemory,
-                    };
-                    break :blk sdk_path;
-                }
-                break :blk &[0]u8{};
-            };
-            if (android_studio_sdk_path.len > 0) {
-                return android_studio_sdk_path;
-            }
+            // const android_studio_sdk_path: []const u8 = blk: {
+            //     for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
+            //         const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
+            //             error.KeyNotFound => continue,
+            //         };
+            //         // NOTE(jae): 2025-05-25 - build.txt file says "AI-243.24978.46.2431.13208083"
+            //         // For my install, "SdkPath" is an empty string, so this may not be used anymore.
+            //         const sdk_path = key.getString(allocator, "Android Studio", "SdkPath") catch |err| switch (err) {
+            //             error.StringNotFound, error.ValueNameNotFound, error.NotAString => continue,
+            //             error.OutOfMemory => return error.OutOfMemory,
+            //         };
+            //         break :blk sdk_path;
+            //     }
+            //     break :blk &[0]u8{};
+            // };
+            // if (android_studio_sdk_path.len > 0) {
+            //     return android_studio_sdk_path;
+            // }
         },
         // NOTE(jae): 2024-09-15
         // Look into auto-discovery of Android SDK for Mac
