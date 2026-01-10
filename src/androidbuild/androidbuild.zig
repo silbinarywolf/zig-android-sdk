@@ -97,29 +97,58 @@ pub fn runNameContext(comptime name: []const u8) []const u8 {
     return "zig-android-sdk " ++ name;
 }
 
-pub fn printErrorsAndExit(message: []const u8, errors: []const []const u8) noreturn {
-    nosuspend {
-        log.err("{s}", .{message});
-        const stderr = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            std.io.getStdErr().writer()
-        else
-            std.fs.File.stderr();
-        std.debug.lockStdErr();
-        defer std.debug.unlockStdErr();
-        for (errors) |err| {
-            var it = std.mem.splitScalar(u8, err, '\n');
-            const headline = it.next() orelse continue;
-            stderr.writeAll("- ") catch {};
-            stderr.writeAll(headline) catch {};
-            stderr.writeAll("\n") catch {};
-            while (it.next()) |line| {
-                stderr.writeAll("  ") catch {};
-                stderr.writeAll(line) catch {};
+pub fn printErrorsAndExit(b: *std.Build, message: []const u8, errors: []const []const u8) noreturn {
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
+        nosuspend {
+            // Deprecated path for Zig 0.14.x and Zig 0.15.x
+            log.err("{s}", .{message});
+
+            const stderr = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+                std.io.getStdErr().writer()
+            else if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 15)
+                std.fs.File.stderr()
+            else
+                @compileError("NOTE: Handled below for newer zig cases");
+
+            for (errors) |err| {
+                var it = std.mem.splitScalar(u8, err, '\n');
+                const headline = it.next() orelse continue;
+                stderr.writeAll("- ") catch {};
+                stderr.writeAll(headline) catch {};
                 stderr.writeAll("\n") catch {};
+                while (it.next()) |line| {
+                    stderr.writeAll("  ") catch {};
+                    stderr.writeAll(line) catch {};
+                    stderr.writeAll("\n") catch {};
+                }
             }
+            stderr.writeAll("\n") catch {};
         }
-        stderr.writeAll("\n") catch {};
+        std.process.exit(1);
     }
+
+    // Format errors and then use the logger to show the user
+    var buf = b.allocator.alloc(u8, 16384) catch @panic("OOM");
+    defer b.allocator.free(buf);
+    var writer = std.Io.Writer.fixed(buf[0..]);
+    writer.writeAll(message) catch @panic("OOM");
+    writer.writeByte('\n') catch @panic("OOM");
+    if (errors.len == 0) {
+        writer.writeAll("- no errors written") catch @panic("OOM");
+    }
+    for (errors) |err| {
+        var it = std.mem.splitScalar(u8, err, '\n');
+        const headline = it.next() orelse continue;
+        writer.writeAll("- ") catch @panic("OOM");
+        writer.writeAll(headline) catch @panic("OOM");
+        writer.writeByte('\n') catch @panic("OOM");
+        while (it.next()) |line| {
+            writer.writeAll("  ") catch @panic("OOM");
+            writer.writeAll(line) catch @panic("OOM");
+            writer.writeByte('\n') catch @panic("OOM");
+        }
+    }
+    log.err("{s}", .{writer.buffered()});
     std.process.exit(1);
 }
 

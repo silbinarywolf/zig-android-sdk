@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const android = @import("android");
 const rl = @import("raylib");
 
-pub fn main() void {
+pub fn main() !void {
     const screenWidth = 800;
     const screenHeight = 450;
     rl.initWindow(screenWidth, screenHeight, "raylib-zig [core] example - basic window");
@@ -19,8 +19,8 @@ pub fn main() void {
     }
 }
 
-/// custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid())
+/// Deprecated: Zig 0.15.2 and lower only, Custom panic handler for Android
+pub const panic = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     android.panic
 else
     std.debug.FullPanic(std.debug.defaultPanic);

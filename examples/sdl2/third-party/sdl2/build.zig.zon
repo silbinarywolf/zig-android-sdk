@@ -1,12 +1,12 @@
 .{
     .name = "sdl",
-    .version = "0.0.0",
+    .version = "2.32.10",
     .dependencies = .{
         .sdl2 = .{
             // NOTE(jae): 2024-06-30
             // Using ".zip" as "tar.gz" fails on Windows for Zig 0.13.0 due to symlink issue with something in the android folders
-            .url = "https://github.com/libsdl-org/SDL/archive/refs/tags/release-2.32.2.zip",
-            .hash = "12204a4a9e9f41fc906decd762be78b9e80de65a7bdec428aa0dfdf03f46e7614d9e",
+            .url = "https://github.com/libsdl-org/SDL/archive/refs/tags/release-2.32.10.zip",
+            .hash = "N-V-__8AAFcztQQdVKXrgoq8Tf7zye7uFtMaKf1YBm1QYPN3",
         },
     },
     .paths = .{

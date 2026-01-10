@@ -78,7 +78,7 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
         ndk.validateApiLevel(b, options.api_level, &errors);
     }
     if (errors.items.len > 0) {
-        printErrorsAndExit("unable to find required Android installation", errors.items);
+        printErrorsAndExit(sdk.b, "unable to find required Android installation", errors.items);
     }
 
     const apk: *Apk = b.allocator.create(Apk) catch @panic("OOM");
@@ -261,7 +261,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         //     try errors.append(b.fmt("must add at least one Java file to build OR you must setup your AndroidManifest.xml to have 'android:hasCode=false'", .{}));
         // }
         if (errors.items.len > 0) {
-            printErrorsAndExit("misconfigured Android APK", errors.items);
+            printErrorsAndExit(apk.b, "misconfigured Android APK", errors.items);
         }
     }
 
@@ -503,7 +503,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             }
             apk.setLibCFile(artifact);
             apk.addLibraryPaths(artifact.root_module);
-            artifact.linkLibC();
+            artifact.root_module.link_libc = true;
 
             // Apply workaround for Zig 0.14.0 stable
             //
@@ -546,6 +546,17 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             apk.build_tools.d8,
         });
         d8.setName(runNameContext("d8"));
+
+        // Prepend JDK bin path so d8 can always find "java", etc
+        if (apk.sdk.jdk_path.len > 0) {
+            var env_map = d8.getEnvMap();
+            const path = env_map.get("PATH") orelse &[0]u8{};
+            const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
+                b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
+                path,
+            });
+            try env_map.put("PATH", new_path);
+        }
 
         // ie. android_sdk/platforms/android-{api-level}/android.jar
         d8.addArg("--lib");
@@ -717,6 +728,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             apk.build_tools.apksigner,
             "sign",
         });
+        try apk.updatePathWithJdk(apksigner);
         apksigner.setName(runNameContext("apksigner"));
         apksigner.addArg("--ks"); // ks = keystore
         apksigner.addFileArg(key_store.file);
@@ -814,7 +826,7 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
     // NOTE(jae): 2025-11-18
     // Due to Android include files not being provided by Zig, we should provide them if the library is linking against C++
     // This resolves an issue where if you are trying to build the openxr_loader C++ code from source, it can't find standard library includes like <string> or <algorithm>
-    artifact.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/c++/v1", .{apk.ndk.sysroot_path}) });
+    artifact.root_module.addIncludePath(.{ .cwd_relative = b.fmt("{s}/usr/include/c++/v1", .{apk.ndk.sysroot_path}) });
 
     if (artifact.root_module.link_libcpp == true) {
         // NOTE(jae): 2025-04-06
@@ -907,6 +919,21 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
     // artifact.link_function_sections = true;
     // Seemingly not "needed" anymore, at least for x86_64 Android builds
     // artifact.export_table = true;
+}
+
+/// Prepend JDK bin path so "d8", "apksigner", etc can always find "java"
+fn updatePathWithJdk(apk: *Apk, run: *std.Build.Step.Run) !void {
+    if (apk.sdk.jdk_path.len == 0) return;
+
+    const b = apk.b;
+
+    var env_map = run.getEnvMap();
+    const path = env_map.get("PATH") orelse &[0]u8{};
+    const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
+        b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
+        path,
+    });
+    try env_map.put("PATH", new_path);
 }
 
 const Apk = @This();

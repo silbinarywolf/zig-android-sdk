@@ -3,10 +3,6 @@ const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 const Allocator = std.mem.Allocator;
 
-/// Used for reading install locations from the registry
-const RegistryWtf8 = @import("WindowsSdk.zig").RegistryWtf8;
-const windows = std.os.windows;
-
 const ApiLevel = androidbuild.ApiLevel;
 const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
@@ -66,16 +62,11 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
     const host_os_tag = b.graph.host.result.os.tag;
 
     // Discover tool paths
-    var path_search = PathSearch.init(b.allocator, host_os_tag) catch |err| switch (err) {
+    var path_search = PathSearch.init(b, host_os_tag) catch |err| switch (err) {
         error.OutOfMemory => @panic("OOM"),
         error.EnvironmentVariableNotFound => @panic("unable to find PATH as an environment variable"),
     };
-    const configured_jdk_path = getJDKPath(b.allocator) catch @panic("OOM");
-    if (configured_jdk_path.len > 0) {
-        // Set JDK path here so it will not try searching for jarsigner.exe if searching for Android SDK
-        path_search.jdk_path = configured_jdk_path;
-    }
-    const configured_android_sdk_path = getAndroidSDKPath(b.allocator) catch @panic("OOM");
+    const configured_android_sdk_path = getAndroidSDKPath(b) catch @panic("OOM");
     if (configured_android_sdk_path.len > 0) {
         // Set android SDK path here so it will not try searching for adb.exe if searching for JDK
         path_search.android_sdk_path = configured_android_sdk_path;
@@ -98,52 +89,51 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
         errors.append(b.allocator,
             \\Android SDK not found.
             \\- Download it from https://developer.android.com/studio
-            \\- Then configure your ANDROID_HOME environment variable to where you've installed it."
+            \\- Then configure your ANDROID_HOME environment variable to where you've installed it.
         ) catch @panic("OOM");
     }
     if (errors.items.len > 0) {
-        printErrorsAndExit("unable to find required Android installation", errors.items);
+        printErrorsAndExit(b, "unable to find required Android installation", errors.items);
     }
 
     // Get commandline tools path
     // - 1st: $ANDROID_HOME/cmdline-tools/bin
     // - 2nd: $ANDROID_HOME/tools/bin
-    const cmdline_tools_path = cmdlineblk: {
-        const cmdline_tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "latest", "bin" });
-        std.fs.accessAbsolute(cmdline_tools, .{}) catch |cmderr| switch (cmderr) {
-            error.FileNotFound => {
-                const tools = b.pathResolve(&[_][]const u8{ android_sdk_path, "tools", "bin" });
-                // Check if Commandline tools path is accessible
-                std.fs.accessAbsolute(tools, .{}) catch |toolerr| switch (toolerr) {
-                    error.FileNotFound => {
-                        const message = b.fmt("Android Command Line Tools not found. Expected at: {s} or {s}", .{
-                            cmdline_tools,
-                            tools,
-                        });
-                        errors.append(b.allocator, message) catch @panic("OOM");
-                    },
-                    else => {
-                        const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
-                            @errorName(toolerr),
-                            tools,
-                        });
-                        errors.append(b.allocator, message) catch @panic("OOM");
-                    },
-                };
-            },
-            else => {
-                const message = b.fmt("Android Command Line Tools path had unexpected error: {s} ({s})", .{
-                    @errorName(cmderr),
-                    cmdline_tools,
-                });
-                errors.append(b.allocator, message) catch @panic("OOM");
-            },
-        };
-        break :cmdlineblk cmdline_tools;
+    const cmdline_tool_path_list = [_][]const u8{
+        b.pathResolve(&[_][]const u8{ android_sdk_path, "cmdline-tools", "latest", "bin" }),
+        b.pathResolve(&[_][]const u8{ android_sdk_path, "tools", "bin" }),
     };
-
+    const cmdline_tools_path: []const u8 = cmdlineblk: {
+        for (cmdline_tool_path_list) |cmdline_tools_path| {
+            const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                std.fs.accessAbsolute(cmdline_tools_path, .{})
+            else
+                std.Io.Dir.accessAbsolute(b.graph.io, cmdline_tools_path, .{});
+            access_wrapped_error catch |err| switch (err) {
+                error.FileNotFound => continue,
+                else => {
+                    const message = b.fmt("Android Command Line Tools path had an unexpected error: {s} ({s})", .{
+                        @errorName(err),
+                        cmdline_tools_path,
+                    });
+                    errors.append(b.allocator, message) catch @panic("OOM");
+                },
+            };
+            break :cmdlineblk cmdline_tools_path;
+        }
+        // If unable to find command line tools, return empty
+        break :cmdlineblk &[0]u8{};
+    };
+    if (cmdline_tools_path.len == 0) {
+        const message = b.fmt("Android SDK Command-line tools not found in SDK folder. (expected {s} or {s} to exist)\n- This can either be installed via Android Studio\n- or downloaded directly here: {s}", .{
+            cmdline_tool_path_list[0],
+            cmdline_tool_path_list[1],
+            "https://developer.android.com/studio#command-line-tools-only",
+        });
+        errors.append(b.allocator, message) catch @panic("OOM");
+    }
     if (errors.items.len > 0) {
-        printErrorsAndExit("unable to find required Android installation", errors.items);
+        printErrorsAndExit(b, "unable to find required Android installation", errors.items);
     }
 
     const platform_tools_path = b.pathResolve(&[_][]const u8{ android_sdk_path, "platform-tools" });
@@ -380,77 +370,56 @@ pub fn createOrGetLibCFile(sdk: *Sdk, compile: *Step.Compile, android_api_level:
     return android_libc_path;
 }
 
-/// Search JDK_HOME, and then JAVA_HOME
-fn getJDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
-    const jdk_home = std.process.getEnvVarOwned(allocator, "JDK_HOME") catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.EnvironmentVariableNotFound => &[0]u8{},
-        // Windows-only
-        error.InvalidWtf8 => @panic("JDK_HOME environment variable is invalid UTF-8"),
-    };
-    if (jdk_home.len > 0) {
-        return jdk_home;
-    }
-
-    const java_home = std.process.getEnvVarOwned(allocator, "JAVA_HOME") catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.EnvironmentVariableNotFound => &[0]u8{},
-        // Windows-only
-        error.InvalidWtf8 => @panic("JAVA_HOME environment variable is invalid UTF-8"),
-    };
-    if (java_home.len > 0) {
-        return java_home;
-    }
-
-    return &[0]u8{};
-}
-
 /// Caller must free returned memory
-fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8 {
-    const android_home = std.process.getEnvVarOwned(allocator, "ANDROID_HOME") catch |err| switch (err) {
-        error.OutOfMemory => return error.OutOfMemory,
-        error.EnvironmentVariableNotFound => &[0]u8{},
-        // Windows-only
-        error.InvalidWtf8 => @panic("ANDROID_HOME environment variable is invalid UTF-8"),
-    };
-    if (android_home.len > 0) {
+fn getAndroidSDKPath(b: *std.Build) error{OutOfMemory}![]const u8 {
+    const allocator = b.allocator;
+    const environ_map = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        &b.graph.env_map
+    else
+        &b.graph.environ_map;
+
+    if (environ_map.get("ANDROID_HOME")) |android_home| if (android_home.len > 0)
         return android_home;
-    }
 
     // Check for Android Studio
     switch (builtin.os.tag) {
         .windows => {
+            // NOTE(jae): 2026-01-10
+            // At least as of Android Studio Meerkat (2024.3.1), built on March 13th 2025.
+            // This logic will not do anything on Windows. SdkPath is empty.
+            //
+            // So let's just remove this.
+            //
             // First, see if SdkPath in the registry is set
             // - Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Android Studio - "SdkPath"
             // - Computer\KHEY_CURRENT_USER\SOFTWARE\Android Studio  - "SdkPath"
-            const android_studio_sdk_path: []const u8 = blk: {
-                for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
-                    const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
-                        error.KeyNotFound => continue,
-                    };
-                    // NOTE(jae): 2025-05-25 - build.txt file says "AI-243.24978.46.2431.13208083"
-                    // For my install, "SdkPath" is an empty string, so this may not be used anymore.
-                    const sdk_path = key.getString(allocator, "Android Studio", "SdkPath") catch |err| switch (err) {
-                        error.StringNotFound, error.ValueNameNotFound, error.NotAString => continue,
-                        error.OutOfMemory => return error.OutOfMemory,
-                    };
-                    break :blk sdk_path;
-                }
-                break :blk &[0]u8{};
-            };
-            if (android_studio_sdk_path.len > 0) {
-                return android_studio_sdk_path;
-            }
+            //
+            // const windows = std.os.windows;
+            // const RegistryWtf8 = @import("WindowsSdk.zig").RegistryWtf8;
+            // const android_studio_sdk_path: []const u8 = blk: {
+            //     for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
+            //         const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
+            //             error.KeyNotFound => continue,
+            //         };
+            //         // NOTE(jae): 2025-05-25 - build.txt file says "AI-243.24978.46.2431.13208083"
+            //         // For my install, "SdkPath" is an empty string, so this may not be used anymore.
+            //         const sdk_path = key.getString(allocator, "Android Studio", "SdkPath") catch |err| switch (err) {
+            //             error.StringNotFound, error.ValueNameNotFound, error.NotAString => continue,
+            //             error.OutOfMemory => return error.OutOfMemory,
+            //         };
+            //         break :blk sdk_path;
+            //     }
+            //     break :blk &[0]u8{};
+            // };
+            // if (android_studio_sdk_path.len > 0) {
+            //     return android_studio_sdk_path;
+            // }
         },
         // NOTE(jae): 2024-09-15
         // Look into auto-discovery of Android SDK for Mac
         // Mac: /Users/<username>/Library/Android/sdk
         .macos => {
-            const user = std.process.getEnvVarOwned(allocator, "USER") catch |err| switch (err) {
-                error.OutOfMemory => return error.OutOfMemory,
-                error.EnvironmentVariableNotFound => &[0]u8{},
-                error.InvalidWtf8 => @panic("USER environment variable is invalid UTF-8"),
-            };
+            const user = environ_map.get("USER") orelse &[0]u8{};
             defer allocator.free(user);
             return try std.fmt.allocPrint(allocator, "/Users/{s}/Library/Android/sdk", .{user});
         },
@@ -462,62 +431,46 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8
         // - /Users/[USER]/Library/Android/sdk
         // Source: https://stackoverflow.com/a/34627928
         .linux => {
-            {
-                const android_sdk_path = "/usr/lib/android-sdk";
+            for ([_][]const u8{
+                "/usr/lib/android-sdk",
+                "/Library/Android/sdk",
+            }) |android_sdk_path| {
                 const has_path: bool = pathblk: {
-                    std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
+                    const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                        std.fs.accessAbsolute(android_sdk_path, .{})
+                    else
+                        std.Io.Dir.accessAbsolute(b.graph.io, android_sdk_path, .{});
+                    access_wrapped_error catch |err| switch (err) {
                         error.FileNotFound => break :pathblk false, // fallthrough and try next
                         else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
                     };
                     break :pathblk true;
                 };
-                if (has_path) {
-                    return android_sdk_path;
+                if (!has_path) {
+                    continue;
                 }
-            }
-
-            {
-                const android_sdk_path = "/Library/Android/sdk";
-                const has_path: bool = pathblk: {
-                    std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
-                        error.FileNotFound => break :pathblk false, // fallthrough and try next
-                        else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
-                    };
-                    break :pathblk true;
-                };
-                if (has_path) {
-                    return android_sdk_path;
-                }
+                return android_sdk_path;
             }
 
             // Check user paths
             // - /home/AccountName/Android/Sdk
             // - /Users/[USER]/Library/Android/sdk
-            const user = std.process.getEnvVarOwned(allocator, "USER") catch |err| switch (err) {
-                error.OutOfMemory => return error.OutOfMemory,
-                error.EnvironmentVariableNotFound => &[0]u8{},
-                error.InvalidWtf8 => @panic("USER environment variable is invalid UTF-8"),
-            };
+            const user = environ_map.get("USER") orelse &[0]u8{};
             if (user.len > 0) {
-                {
-                    const android_sdk_path = try std.fmt.allocPrint(allocator, "/Users/{s}/Library/Android/sdk", .{user});
-                    const has_path: bool = pathblk: {
-                        std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
-                            error.FileNotFound => break :pathblk false, // fallthrough and try next
-                            else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
-                        };
-                        break :pathblk true;
-                    };
-                    if (has_path) {
-                        return android_sdk_path;
-                    }
-                }
-                {
+                inline for ([_][]const u8{
+                    "/Users/{s}/Library/Android/sdk",
                     // NOTE(jae): 2025-05-11
                     // No idea if /AccountName/ maps to $USER but going to assume it does for now.
-                    const android_sdk_path = try std.fmt.allocPrint(allocator, "/home/{s}/Android/Sdk", .{user});
+                    "/home/{s}/Android/Sdk",
+                }) |android_sdk_user_path_template| {
+                    const android_sdk_path = try std.fmt.allocPrint(allocator, android_sdk_user_path_template, .{user});
+                    errdefer allocator.free(android_sdk_path);
                     const has_path: bool = pathblk: {
-                        std.fs.accessAbsolute(android_sdk_path, .{}) catch |err| switch (err) {
+                        const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                            std.fs.accessAbsolute(android_sdk_path, .{})
+                        else
+                            std.Io.Dir.accessAbsolute(b.graph.io, android_sdk_path, .{});
+                        access_wrapped_error catch |err| switch (err) {
                             error.FileNotFound => break :pathblk false, // fallthrough and try next
                             else => std.debug.panic("{s} has error: {}", .{ android_sdk_path, err }),
                         };
@@ -526,6 +479,7 @@ fn getAndroidSDKPath(allocator: std.mem.Allocator) error{OutOfMemory}![]const u8
                     if (has_path) {
                         return android_sdk_path;
                     }
+                    allocator.free(android_sdk_path);
                 }
             }
         },
@@ -546,6 +500,7 @@ pub const KeyStore = struct {
 
 /// Searches your PATH environment variable directories for adb, jarsigner, etc
 const PathSearch = struct {
+    b: *std.Build,
     allocator: std.mem.Allocator,
     path_env: []const u8,
     path_it: std.mem.SplitIterator(u8, .scalar),
@@ -556,15 +511,16 @@ const PathSearch = struct {
     jarsigner: []const u8,
 
     android_sdk_path: ?[]const u8 = null,
-    jdk_path: ?[]const u8 = null,
+    jdk_path: ?[]const u8,
 
-    pub fn init(allocator: std.mem.Allocator, host_os_tag: std.Target.Os.Tag) error{ EnvironmentVariableNotFound, OutOfMemory }!PathSearch {
-        const path_env = std.process.getEnvVarOwned(allocator, "PATH") catch |err| switch (err) {
-            error.OutOfMemory => return error.OutOfMemory,
-            error.EnvironmentVariableNotFound => return error.EnvironmentVariableNotFound,
-            // Windows-only
-            error.InvalidWtf8 => @panic("PATH environment variable is invalid UTF-8"),
-        };
+    pub fn init(b: *std.Build, host_os_tag: std.Target.Os.Tag) error{ EnvironmentVariableNotFound, OutOfMemory }!PathSearch {
+        const allocator = b.allocator;
+        const environ_map = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+            &b.graph.env_map
+        else
+            &b.graph.environ_map;
+
+        const path_env = environ_map.get("PATH") orelse return error.EnvironmentVariableNotFound;
         if (path_env.len == 0) {
             return error.EnvironmentVariableNotFound;
         }
@@ -574,19 +530,56 @@ const PathSearch = struct {
         const adb = try std.mem.concat(allocator, u8, &.{ "adb", exe_suffix });
         const jarsigner = try std.mem.concat(allocator, u8, &.{ "jarsigner", exe_suffix });
 
+        // setup paths
+        const configured_jdk_path: ?[]const u8 = jdkpath: {
+            const jdk_home = environ_map.get("JDK_HOME") orelse &[0]u8{};
+            if (jdk_home.len > 0) {
+                break :jdkpath jdk_home;
+            }
+            const java_home = environ_map.get("JAVA_HOME") orelse &[0]u8{};
+            if (java_home.len > 0) {
+                break :jdkpath java_home;
+            }
+            if (host_os_tag == .linux) {
+                // const environ_map = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                //     &b.graph.env_map
+                // else
+                //     &b.graph.environ_map;
+                const maybe_user: ?[]const u8 = environ_map.get("USER") orelse null;
+                if (maybe_user) |user| {
+                    const jarsigner_path = b.findProgram(&.{"jarsigner"}, &.{
+                        // NOTE(jae): 2026-01-10
+                        // I manually put my install here, not standard per-se but I see no reason to not support this.
+                        b.fmt("/home/{s}/android-studio/jbr/bin", .{user}),
+                        // NOTE(jae): 2026-01-10
+                        // Suggested install locations for Android Studio from: https://developer.android.com/studio/install
+                        "/usr/local/android-studio/jbr/bin", // for your user profile
+                        "/opt/android-studio/jbr/bin", // for shared users
+                    }) catch break :jdkpath null;
+                    const jbr_bin_dir = std.fs.path.dirname(jarsigner_path) orelse break :jdkpath null;
+                    const jbr_dir = std.fs.path.dirname(jbr_bin_dir) orelse break :jdkpath null;
+                    break :jdkpath jbr_dir;
+                }
+            }
+            break :jdkpath null;
+        };
+
         const path_it = std.mem.splitScalar(u8, path_env, ';');
         return .{
+            .b = b,
             .allocator = allocator,
             .path_env = path_env,
             .path_it = path_it,
             .adb = adb,
             .jarsigner = jarsigner,
+            .jdk_path = configured_jdk_path,
         };
     }
 
-    pub fn deinit(self: *PathSearch) void {
-        const allocator = self.allocator;
-        allocator.free(self.path_env);
+    pub fn deinit(_: *PathSearch) void {
+        // NOTE(jae): 2026-01-09: Using copy from "b.graph.environ_map" now
+        // const allocator = self.allocator;
+        // allocator.free(self.path_env);
     }
 
     /// Get the Android SDK Path, the caller owns the memory
@@ -630,9 +623,10 @@ const PathSearch = struct {
                     {
                         const adb_binary_path = std.fs.path.join(allocator, &.{ path_item, self.adb }) catch |err| return err;
                         defer allocator.free(adb_binary_path);
-                        std.fs.accessAbsolute(adb_binary_path, .{}) catch {
-                            break :blk;
-                        };
+                        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                            std.fs.accessAbsolute(adb_binary_path, .{}) catch break :blk
+                        else
+                            std.Io.Dir.accessAbsolute(self.b.graph.io, adb_binary_path, .{}) catch break :blk;
                     }
                     // Transform: "Sdk\platform-tools" into "Sdk"
                     const sdk_path = std.fs.path.dirname(path_item) orelse {
@@ -655,9 +649,10 @@ const PathSearch = struct {
                         const jarsigner_binary_path = std.fs.path.join(allocator, &.{ path_item, self.jarsigner }) catch |err| return err;
                         defer allocator.free(jarsigner_binary_path);
 
-                        std.fs.accessAbsolute(jarsigner_binary_path, .{}) catch {
-                            break :blk;
-                        };
+                        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                            std.fs.accessAbsolute(jarsigner_binary_path, .{}) catch break :blk
+                        else
+                            std.Io.Dir.accessAbsolute(self.b.graph.io, jarsigner_binary_path, .{}) catch break :blk;
                     }
                     // Transform: "jdk-21.0.3.9-hotspot/bin" into "jdk-21.0.3.9-hotspot"
                     const jdk_path = std.fs.path.dirname(path_item) orelse {
