@@ -3,10 +3,6 @@ const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 const Allocator = std.mem.Allocator;
 
-/// Used for reading install locations from the registry
-const RegistryWtf8 = @import("WindowsSdk.zig").RegistryWtf8;
-const windows = std.os.windows;
-
 const ApiLevel = androidbuild.ApiLevel;
 const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
@@ -397,6 +393,9 @@ fn getAndroidSDKPath(b: *std.Build) error{OutOfMemory}![]const u8 {
             // First, see if SdkPath in the registry is set
             // - Computer\HKEY_LOCAL_MACHINE\SOFTWARE\Android Studio - "SdkPath"
             // - Computer\KHEY_CURRENT_USER\SOFTWARE\Android Studio  - "SdkPath"
+            //
+            // const windows = std.os.windows;
+            // const RegistryWtf8 = @import("WindowsSdk.zig").RegistryWtf8;
             // const android_studio_sdk_path: []const u8 = blk: {
             //     for ([_]windows.HKEY{ windows.HKEY_CURRENT_USER, windows.HKEY_LOCAL_MACHINE }) |hkey| {
             //         const key = RegistryWtf8.openKey(hkey, "SOFTWARE", .{}) catch |err| switch (err) {
