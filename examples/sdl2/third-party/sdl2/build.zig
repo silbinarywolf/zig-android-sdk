@@ -168,6 +168,7 @@ pub fn build(b: *std.Build) !void {
         // for Android.
         //
         // error: nullability specifier cannot be applied to non-pointer type 'unsigned short [3]'
+        // in: ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/stdlib.h:163
         sdl_c_module.defineCMacro("_Nonnull", "");
     }
 

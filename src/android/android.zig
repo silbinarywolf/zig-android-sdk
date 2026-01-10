@@ -262,14 +262,14 @@ const Panic = struct {
         var android_log_writer_mutex = std.Thread.Mutex.Recursive.init;
 
         var android_panic_log_writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            @import("LogWriter_Zig014"){
+            @import("LogWriter_Zig014.zig"){
                 .level = .fatal,
             }
         else
             AndroidLog.init(.fatal, &android_log_writer_buffer);
 
         fn lockAndroidLogWriter() if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            std.io.GenericWriter(*@import("LogWriter_Zig014"), @import("LogWriter_Zig014.zig").Error, @import("LogWriter_Zig014.zig").write)
+            std.io.GenericWriter(*@import("LogWriter_Zig014.zig"), @import("LogWriter_Zig014.zig").Error, @import("LogWriter_Zig014.zig").write)
         else
             *std.Io.Writer {
             android_log_writer_mutex.lock();
