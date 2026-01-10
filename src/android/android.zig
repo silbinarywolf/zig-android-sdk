@@ -262,18 +262,18 @@ const Panic = struct {
         var android_log_writer_mutex = std.Thread.Mutex.Recursive.init;
 
         var android_panic_log_writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            LogWriter_Zig014{
+            @import("LogWriter_Zig014"){
                 .level = .fatal,
             }
         else
             AndroidLog.init(.fatal, &android_log_writer_buffer);
 
         fn lockAndroidLogWriter() if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-            std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write)
+            std.io.GenericWriter(*@import("LogWriter_Zig014"), @import("LogWriter_Zig014").Error, @import("LogWriter_Zig014").write)
         else
             *std.Io.Writer {
             android_log_writer_mutex.lock();
-            if (is_zig_014_or_less) {
+            if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
                 android_panic_log_writer.flush();
                 return android_panic_log_writer.writer();
             } else {
@@ -283,7 +283,7 @@ const Panic = struct {
         }
 
         fn unlockAndroidLogWriter() void {
-            if (is_zig_014_or_less) {
+            if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
                 android_panic_log_writer.flush();
             } else {
                 android_panic_log_writer.writer.flush() catch {};
@@ -336,7 +336,7 @@ const Panic = struct {
                         );
                     }
                     if (@errorReturnTrace()) |t| dumpStackTrace(t.*);
-                    if (is_zig_014_or_less) {
+                    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
                         dumpCurrentStackTrace_014(first_trace_addr);
                     } else {
                         const stderr = io.lockAndroidLogWriter();
