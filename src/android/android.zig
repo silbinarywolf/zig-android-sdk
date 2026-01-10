@@ -70,92 +70,9 @@ pub const Level = enum(u8) {
 
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-    LogWriter_Zig014.logFn
+    @import("zig_014.zig").logFn
 else
     AndroidLog.logFn;
-
-/// LogWriter_Zig014 was was taken basically as is from: https://github.com/ikskuh/ZigAndroidTemplate
-///
-/// Deprecated: To be removed when Zig 0.15.x is stable
-const LogWriter_Zig014 = struct {
-    level: Level,
-
-    line_buffer: [8192]u8 = undefined,
-    line_len: usize = 0,
-
-    const Error = error{};
-    const Writer = std.io.Writer(*@This(), Error, write);
-
-    fn logFn(
-        comptime message_level: std.log.Level,
-        comptime scope: @Type(.enum_literal),
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        // NOTE(jae): 2024-09-11
-        // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
-        // So we don't do that here.
-        const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
-        var androidLogWriter = comptime @This(){
-            .level = switch (message_level) {
-                //  => .ANDROID_LOG_VERBOSE, // No mapping
-                .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
-                .info => .info, // android.ANDROID_LOG_INFO = 4,
-                .warn => .warn, // android.ANDROID_LOG_WARN = 5,
-                .err => .err, // android.ANDROID_LOG_WARN = 6,
-            },
-        };
-        const logger = androidLogWriter.writer();
-
-        nosuspend {
-            logger.print(prefix2 ++ format ++ "\n", args) catch return;
-            androidLogWriter.flush();
-        }
-    }
-
-    fn write(self: *@This(), buffer: []const u8) Error!usize {
-        for (buffer) |char| {
-            switch (char) {
-                '\n' => {
-                    self.flush();
-                },
-                else => {
-                    if (self.line_len >= self.line_buffer.len - 1) {
-                        self.flush();
-                    }
-                    self.line_buffer[self.line_len] = char;
-                    self.line_len += 1;
-                },
-            }
-        }
-        return buffer.len;
-    }
-
-    fn flush(self: *@This()) void {
-        if (self.line_len > 0) {
-            std.debug.assert(self.line_len < self.line_buffer.len - 1);
-            self.line_buffer[self.line_len] = 0;
-            if (log_tag.len == 0) {
-                _ = __android_log_write(
-                    @intFromEnum(self.level),
-                    null,
-                    &self.line_buffer,
-                );
-            } else {
-                _ = __android_log_write(
-                    @intFromEnum(self.level),
-                    log_tag.ptr,
-                    &self.line_buffer,
-                );
-            }
-        }
-        self.line_len = 0;
-    }
-
-    fn writer(self: *@This()) Writer {
-        return Writer{ .context = self };
-    }
-};
 
 /// AndroidLog is a Writer interface that logs out to Android via "__android_log_write" calls
 const AndroidLog = struct {
@@ -290,12 +207,10 @@ const Panic = struct {
     /// This is used to catch and handle panics triggered by the panic handler.
     threadlocal var panic_stage: usize = 0;
 
-    const is_zig_014_or_less = (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14);
-
     fn panic(message: []const u8, ret_addr: ?usize) noreturn {
         @branchHint(.cold);
         if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
-        // if (!is_zig_014_or_less) @compileError("Android Panic needs to be updated to the newer io.Writer vtable implementation to work in Zig 0.15.0+");
+
         const first_trace_addr = ret_addr orelse @returnAddress();
         panicImpl(first_trace_addr, message);
     }
@@ -346,14 +261,14 @@ const Panic = struct {
         /// information.
         var android_log_writer_mutex = std.Thread.Mutex.Recursive.init;
 
-        var android_panic_log_writer = if (is_zig_014_or_less)
+        var android_panic_log_writer = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
             LogWriter_Zig014{
                 .level = .fatal,
             }
         else
             AndroidLog.init(.fatal, &android_log_writer_buffer);
 
-        fn lockAndroidLogWriter() if (is_zig_014_or_less)
+        fn lockAndroidLogWriter() if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
             std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write)
         else
             *std.Io.Writer {

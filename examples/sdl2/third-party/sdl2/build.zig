@@ -10,89 +10,90 @@ pub fn build(b: *std.Build) !void {
     const sdl_include_path = sdl_path.path(b, "include");
 
     const is_shared_library = target.result.abi.isAndroid(); // NOTE(jae): 2024-09-22: Android uses shared library as SDL2 loads it as part of SDLActivity.java
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
     const lib = b.addLibrary(.{
         .name = "SDL2",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-        }),
+        .root_module = mod,
         .linkage = if (is_shared_library) .dynamic else .static,
     });
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = sdl_path,
         .files = &generic_src_files,
     });
-    lib.root_module.addCMacro("SDL_USE_BUILTIN_OPENGL_DEFINITIONS", "1");
+    mod.addCMacro("SDL_USE_BUILTIN_OPENGL_DEFINITIONS", "1");
 
-    var sdl_config_header: ?*std.Build.Step.ConfigHeader = null;
+    // var sdl_config_header: ?*std.Build.Step.ConfigHeader = null;
     switch (target.result.os.tag) {
         .windows => {
             // Between Zig 0.13.0 and Zig 0.14.0, "windows.gaming.input.h" was removed from "lib/libc/include/any-windows-any"
             // This folder brings all headers needed by that one file so that SDL can be compiled for Windows.
-            lib.addIncludePath(b.path("upstream/any-windows-any"));
+            mod.addIncludePath(b.path("upstream/any-windows-any"));
 
-            lib.addCSourceFiles(.{
+            mod.addCSourceFiles(.{
                 .root = sdl_path,
                 .files = &windows_src_files,
             });
-            lib.linkSystemLibrary("setupapi");
-            lib.linkSystemLibrary("winmm");
-            lib.linkSystemLibrary("gdi32");
-            lib.linkSystemLibrary("imm32");
-            lib.linkSystemLibrary("version");
-            lib.linkSystemLibrary("oleaut32");
-            lib.linkSystemLibrary("ole32");
+            mod.linkSystemLibrary("setupapi", .{});
+            mod.linkSystemLibrary("winmm", .{});
+            mod.linkSystemLibrary("gdi32", .{});
+            mod.linkSystemLibrary("imm32", .{});
+            mod.linkSystemLibrary("version", .{});
+            mod.linkSystemLibrary("oleaut32", .{});
+            mod.linkSystemLibrary("ole32", .{});
         },
         .macos => {
             // NOTE(jae): 2024-07-07
             // Cross-compilation from Linux to Mac requires more effort currently (Zig 0.13.0)
             // See: https://github.com/ziglang/zig/issues/1349
 
-            lib.addCSourceFiles(.{
+            mod.addCSourceFiles(.{
                 .root = sdl_path,
                 .files = &darwin_src_files,
             });
-            lib.addCSourceFiles(.{
+            mod.addCSourceFiles(.{
                 .root = sdl_path,
                 .files = &objective_c_src_files,
                 .flags = &.{"-fobjc-arc"},
             });
-            lib.linkFramework("OpenGL");
-            lib.linkFramework("Metal");
-            lib.linkFramework("CoreVideo");
-            lib.linkFramework("Cocoa");
-            lib.linkFramework("IOKit");
-            lib.linkFramework("ForceFeedback");
-            lib.linkFramework("Carbon");
-            lib.linkFramework("CoreAudio");
-            lib.linkFramework("AudioToolbox");
-            lib.linkFramework("AVFoundation");
-            lib.linkFramework("Foundation");
-            lib.linkFramework("GameController");
-            lib.linkFramework("CoreHaptics");
+            mod.linkFramework("OpenGL", .{});
+            mod.linkFramework("Metal", .{});
+            mod.linkFramework("CoreVideo", .{});
+            mod.linkFramework("Cocoa", .{});
+            mod.linkFramework("IOKit", .{});
+            mod.linkFramework("ForceFeedback", .{});
+            mod.linkFramework("Carbon", .{});
+            mod.linkFramework("CoreAudio", .{});
+            mod.linkFramework("AudioToolbox", .{});
+            mod.linkFramework("AVFoundation", .{});
+            mod.linkFramework("Foundation", .{});
+            mod.linkFramework("GameController", .{});
+            mod.linkFramework("CoreHaptics", .{});
         },
         else => {
             if (target.result.abi.isAndroid()) {
-                lib.root_module.addCSourceFiles(.{
+                mod.addCSourceFiles(.{
                     .root = sdl_path,
                     .files = &android_src_files,
                 });
                 // NOTE(jae): 2024-09-22
                 // Build settings taken from: SDL2-2.32.2/src/hidapi/android/jni/Android.mk
                 // SDLActivity.java by default expects to be able to load this library
-                lib.root_module.addCSourceFiles(.{
+                mod.addCSourceFiles(.{
                     .root = sdl_path,
                     .files = &[_][]const u8{
                         "src/hidapi/android/hid.cpp",
                     },
                     .flags = &.{"-std=c++11"},
                 });
-                lib.linkLibCpp();
+                mod.link_libcpp = true;
 
                 // This is needed for "src/render/opengles/SDL_render_gles.c" to compile
-                lib.root_module.addCMacro("GL_GLEXT_PROTOTYPES", "1");
+                mod.addCMacro("GL_GLEXT_PROTOTYPES", "1");
 
                 // Add Java files to dependency
                 const java_dir = sdl_dep.path("android-project/app/src/main/java/org/libsdl/app");
@@ -113,12 +114,12 @@ pub fn build(b: *std.Build) !void {
                 }
 
                 // https://github.com/libsdl-org/SDL/blob/release-2.30.6/Android.mk#L82C62-L82C69
-                lib.linkSystemLibrary("dl");
-                lib.linkSystemLibrary("GLESv1_CM");
-                lib.linkSystemLibrary("GLESv2");
-                lib.linkSystemLibrary("OpenSLES");
-                lib.linkSystemLibrary("log");
-                lib.linkSystemLibrary("android");
+                mod.linkSystemLibrary("dl", .{});
+                mod.linkSystemLibrary("GLESv1_CM", .{});
+                mod.linkSystemLibrary("GLESv2", .{});
+                mod.linkSystemLibrary("OpenSLES", .{});
+                mod.linkSystemLibrary("log", .{});
+                mod.linkSystemLibrary("android", .{});
 
                 // SDLActivity.java's getMainFunction defines the entrypoint as "SDL_main"
                 // So your main / root file will need something like this for Android
@@ -130,23 +131,26 @@ pub fn build(b: *std.Build) !void {
                 //    if (builtin.abi.isAndroid()) @export(&android_sdl_main, .{ .name = "SDL_main", .linkage = .strong });
                 // }
             } else {
-                const config_header = b.addConfigHeader(.{
-                    .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
-                    .include_path = "SDL/SDL_config.h",
-                }, .{});
-                sdl_config_header = config_header;
-
-                lib.addConfigHeader(config_header);
-                lib.installConfigHeader(config_header);
+                // NOTE(jae): 2026-01-10
+                // Not maintained for example anymore.
+                //
+                // const config_header = b.addConfigHeader(.{
+                //     .style = .{ .cmake = sdl_include_path.path(b, "SDL_config.h.cmake") },
+                //     .include_path = "SDL/SDL_config.h",
+                // }, .{});
+                // sdl_config_header = config_header;
+                //
+                // mod.addConfigHeader(config_header);
+                // lib.installConfigHeader(config_header);
             }
         },
     }
     // NOTE(jae): 2024-07-07
     // This must come *after* addConfigHeader logic above for per-OS so that the include for SDL_config.h takes precedence
-    lib.addIncludePath(sdl_include_path);
+    mod.addIncludePath(sdl_include_path);
     // NOTE(jae): 2024-04-07
     // Not installing header as we include/export it from the module
-    // lib.installHeadersDirectory("include", "SDL");
+    // mod.installHeadersDirectory("include", "SDL");
     b.installArtifact(lib);
 
     var sdl_c_module = b.addTranslateC(.{
@@ -154,9 +158,9 @@ pub fn build(b: *std.Build) !void {
         .optimize = .ReleaseFast,
         .root_source_file = b.path("src/sdl.h"),
     });
-    if (sdl_config_header) |config_header| {
-        sdl_c_module.addConfigHeader(config_header);
-    }
+    // if (sdl_config_header) |config_header| {
+    //     sdl_c_module.addConfigHeader(config_header);
+    // }
     sdl_c_module.addIncludePath(sdl_include_path);
 
     _ = b.addModule("sdl", .{
@@ -243,7 +247,7 @@ const generic_src_files = [_][]const u8{
     "src/stdlib/SDL_malloc.c",
     "src/stdlib/SDL_mslibc.c",
     "src/stdlib/SDL_qsort.c",
-    "src/stdlib/SDL_stdlib.c",
+    "src/stdlib/SDL_stdmod.c",
     "src/stdlib/SDL_string.c",
     "src/stdlib/SDL_strtokr.c",
     "src/thread/SDL_thread.c",

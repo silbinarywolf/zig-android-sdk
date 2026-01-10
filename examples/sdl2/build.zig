@@ -70,14 +70,6 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .root_source_file = b.path("src/sdl-zig-demo.zig"),
         });
-        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
-            .name = exe_name,
-            .root_module = app_module,
-            .linkage = .dynamic,
-        }) else b.addExecutable(.{
-            .name = exe_name,
-            .root_module = app_module,
-        });
 
         const library_optimize = if (!target.result.abi.isAndroid())
             optimize
@@ -96,15 +88,15 @@ pub fn build(b: *std.Build) void {
             if (target.result.os.tag == .linux and !target.result.abi.isAndroid()) {
                 // The SDL package doesn't work for Linux yet, so we rely on system
                 // packages for now.
-                exe.linkSystemLibrary("SDL2");
-                exe.linkLibC();
+                app_module.linkSystemLibrary("SDL2", .{});
+                app_module.link_libc = true;
             } else {
                 const sdl_lib = sdl_dep.artifact("SDL2");
-                exe.linkLibrary(sdl_lib);
+                app_module.linkLibrary(sdl_lib);
             }
 
             const sdl_module = sdl_dep.module("sdl");
-            exe.root_module.addImport("sdl", sdl_module);
+            app_module.addImport("sdl", sdl_module);
         }
 
         // if building as library for Android, add this target
@@ -116,10 +108,19 @@ pub fn build(b: *std.Build) void {
                 .optimize = optimize,
                 .target = target,
             });
-            exe.root_module.addImport("android", android_dep.module("android"));
+            app_module.addImport("android", android_dep.module("android"));
 
-            apk.addArtifact(exe);
+            const exe_lib = b.addLibrary(.{
+                .name = exe_name,
+                .root_module = app_module,
+                .linkage = .dynamic,
+            });
+            apk.addArtifact(exe_lib);
         } else {
+            const exe = b.addExecutable(.{
+                .name = exe_name,
+                .root_module = app_module,
+            });
             b.installArtifact(exe);
 
             // If only 1 target, add "run" step

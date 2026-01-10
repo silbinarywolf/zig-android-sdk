@@ -1,0 +1,94 @@
+//! LogWriter_Zig014 was was taken basically as is from: https://github.com/ikskuh/ZigAndroidTemplate
+//!
+//! Deprecated: To be removed when Zig 0.15.x is stable
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Level = @import("android.zig").Level;
+
+level: Level,
+
+line_buffer: [8192]u8 = undefined,
+line_len: usize = 0,
+
+const Error = error{};
+const Writer = std.io.Writer(*@This(), Error, write);
+
+const log_tag: [:0]const u8 = @import("android_builtin").package_name;
+
+fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    // NOTE(jae): 2024-09-11
+    // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
+    // So we don't do that here.
+    const prefix2 = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
+    var androidLogWriter = comptime @This(){
+        .level = switch (message_level) {
+            //  => .ANDROID_LOG_VERBOSE, // No mapping
+            .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
+            .info => .info, // android.ANDROID_LOG_INFO = 4,
+            .warn => .warn, // android.ANDROID_LOG_WARN = 5,
+            .err => .err, // android.ANDROID_LOG_WARN = 6,
+        },
+    };
+    const logger = androidLogWriter.writer();
+
+    nosuspend {
+        logger.print(prefix2 ++ format ++ "\n", args) catch return;
+        androidLogWriter.flush();
+    }
+}
+
+fn write(self: *@This(), buffer: []const u8) Error!usize {
+    for (buffer) |char| {
+        switch (char) {
+            '\n' => {
+                self.flush();
+            },
+            else => {
+                if (self.line_len >= self.line_buffer.len - 1) {
+                    self.flush();
+                }
+                self.line_buffer[self.line_len] = char;
+                self.line_len += 1;
+            },
+        }
+    }
+    return buffer.len;
+}
+
+fn flush(self: *@This()) void {
+    if (self.line_len > 0) {
+        std.debug.assert(self.line_len < self.line_buffer.len - 1);
+        self.line_buffer[self.line_len] = 0;
+        if (log_tag.len == 0) {
+            _ = __android_log_write(
+                @intFromEnum(self.level),
+                null,
+                &self.line_buffer,
+            );
+        } else {
+            _ = __android_log_write(
+                @intFromEnum(self.level),
+                log_tag.ptr,
+                &self.line_buffer,
+            );
+        }
+    }
+    self.line_len = 0;
+}
+
+fn writer(self: *@This()) Writer {
+    return Writer{ .context = self };
+}
+
+/// Writes the constant string text to the log, with priority prio and tag tag.
+/// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+/// Source: https://developer.android.com/ndk/reference/group/logging
+extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
+
+const LogWriter_Zig014 = @This();
