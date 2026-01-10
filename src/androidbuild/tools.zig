@@ -555,7 +555,7 @@ const PathSearch = struct {
                         // Suggested install locations for Android Studio from: https://developer.android.com/studio/install
                         "/usr/local/android-studio/jbr/bin", // for your user profile
                         "/opt/android-studio/jbr/bin", // for shared users
-                    }) catch break :jdkpath null; // TODO: Dont return NULL here
+                    }) catch break :jdkpath null;
                     const jbr_bin_dir = std.fs.path.dirname(jarsigner_path) orelse break :jdkpath null;
                     const jbr_dir = std.fs.path.dirname(jbr_bin_dir) orelse break :jdkpath null;
                     break :jdkpath jbr_dir;
