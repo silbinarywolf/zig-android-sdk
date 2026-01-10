@@ -163,6 +163,11 @@ pub fn build(b: *std.Build) !void {
     // }
     sdl_c_module.addIncludePath(sdl_include_path);
     if (target.result.abi.isAndroid()) {
+        // NOTE(jae): 2026-01-10
+        // Resolve issue in Zig 0.16.X at least, where _Nonnull causes issues when building SDL2
+        // for Android.
+        //
+        // error: nullability specifier cannot be applied to non-pointer type 'unsigned short [3]'
         sdl_c_module.defineCMacro("_Nonnull", "");
     }
 
