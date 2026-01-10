@@ -138,6 +138,9 @@ jobs:
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
-    - name: Build Raylib Example (Zig Stable)
-      run: zig build -Dandroid=true --verbose
-      working-directory: examples/raylib
+    # note(jae): 2026-01-10
+    # Downstream packages for Raylib won't work with Zig 0.15.2 *and* Zig 0.16.X
+    #
+    # - name: Build Raylib Example (Zig Nightly)
+    #  run: zig build -Dandroid=true --verbose
+    #  working-directory: examples/raylib

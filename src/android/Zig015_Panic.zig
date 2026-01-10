@@ -8,8 +8,11 @@
 //! 09-22 13:08:49.637  3390  3390 F com.zig.minimal: ???:?:?: 0x7ccea4021d9c in ??? (libandroid_runtime.so)
 
 const std = @import("std");
+const ndk = @import("ndk");
 const builtin = @import("builtin");
 const Logger = @import("Logger.zig");
+
+const Level = ndk.Level;
 
 const package_name = @import("android_builtin").package_name;
 
@@ -86,7 +89,7 @@ const io = struct {
         Logger.init(.fatal, &android_log_writer_buffer);
 
     fn lockAndroidLogWriter() if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-        std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write)
+        LogWriter_Zig014.GenericWriter
     else
         *std.Io.Writer {
         android_log_writer_mutex.lock();
@@ -135,7 +138,7 @@ fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
             {
                 if (builtin.single_threaded) {
                     _ = ndk.__android_log_print(
-                        @intFromEnum(Logger.Level.fatal),
+                        @intFromEnum(Level.fatal),
                         comptime if (package_name.len == 0) null else package_name.ptr,
                         "panic: %.*s",
                         msg.len,
@@ -144,7 +147,7 @@ fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
                 } else {
                     const current_thread_id: u32 = std.Thread.getCurrentId();
                     _ = ndk.__android_log_print(
-                        @intFromEnum(Logger.Level.fatal),
+                        @intFromEnum(Level.fatal),
                         comptime if (package_name.len == 0) null else package_name.ptr,
                         "thread %d panic: %.*s",
                         current_thread_id,
@@ -226,7 +229,7 @@ fn dumpCurrentStackTrace_014(start_addr: ?usize) void {
 
 fn android_fatal_log(message: [:0]const u8) void {
     _ = ndk.__android_log_write(
-        @intFromEnum(Logger.Level.fatal),
+        @intFromEnum(Level.fatal),
         comptime if (package_name.len == 0) null else package_name.ptr,
         message,
     );
@@ -237,24 +240,11 @@ fn android_fatal_print_c_string(
     c_str: [:0]const u8,
 ) void {
     _ = ndk.__android_log_print(
-        @intFromEnum(Logger.Level.fatal),
+        @intFromEnum(Level.fatal),
         comptime if (package_name.len == 0) null else package_name.ptr,
         fmt,
         c_str.ptr,
     );
 }
-
-const ndk = struct {
-    /// Writes the constant string text to the log, with priority prio and tag tag.
-    /// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
-    /// Source: https://developer.android.com/ndk/reference/group/logging
-    pub extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
-
-    /// Writes a formatted string to the log, with priority prio and tag tag.
-    /// The details of formatting are the same as for printf(3)
-    /// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
-    /// Source: https://man7.org/linux/man-pages/man3/printf.3.html
-    pub extern "log" fn __android_log_print(prio: c_int, tag: [*c]const u8, text: [*c]const u8, ...) c_int;
-};
 
 const Panic = @This();

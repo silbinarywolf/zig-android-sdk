@@ -1,11 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
+const ndk = @import("ndk");
 const zig014 = @import("zig014");
 const zig015 = @import("zig015");
 const zig016 = @import("zig016");
 
-const ndk = @import("ndk.zig");
 const Logger = @import("Logger.zig");
+const Level = ndk.Level;
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
@@ -13,15 +15,12 @@ pub const panic = if (builtin.zig_version.major == 0 and builtin.zig_version.min
 else
     @compileError("Android panic handler is no longer maintained as of Zig 0.16.x-dev");
 
-/// Log Levels for Android
-pub const Level = Logger.Level;
-
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
     zig014.LogWriter.logFn
 else if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     zig015.wrapLogFn(androidLogFn)
-else if (builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16)
+else
     zig016.wrapLogFn(androidLogFn);
 
 fn androidLogFn(
@@ -41,7 +40,7 @@ fn androidLogFn(
         @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
     }
 
-    const android_log_level: Logger.Level = switch (message_level) {
+    const android_log_level: Level = switch (message_level) {
         //  => .ANDROID_LOG_VERBOSE, // No mapping
         .debug => .debug, // android.ANDROID_LOG_DEBUG = 3,
         .info => .info, // android.ANDROID_LOG_INFO = 4,

@@ -4,7 +4,8 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const Level = @import("android").Logger.Level;
+const ndk = @import("ndk");
+const Level = ndk.Level;
 
 level: Level,
 
@@ -12,11 +13,12 @@ line_buffer: [8192]u8 = undefined,
 line_len: usize = 0,
 
 const Error = error{};
+pub const GenericWriter = std.io.GenericWriter(*LogWriter_Zig014, LogWriter_Zig014.Error, LogWriter_Zig014.write);
 const Writer = std.io.Writer(*LogWriter_Zig014, Error, write);
 
 const log_tag: [:0]const u8 = @import("android_builtin").package_name;
 
-fn logFn(
+pub fn logFn(
     comptime message_level: std.log.Level,
     comptime scope: @Type(.enum_literal),
     comptime format: []const u8,
@@ -61,18 +63,18 @@ fn write(self: *@This(), buffer: []const u8) Error!usize {
     return buffer.len;
 }
 
-fn flush(self: *@This()) void {
+pub fn flush(self: *@This()) void {
     if (self.line_len > 0) {
         std.debug.assert(self.line_len < self.line_buffer.len - 1);
         self.line_buffer[self.line_len] = 0;
         if (log_tag.len == 0) {
-            _ = __android_log_write(
+            _ = ndk.__android_log_write(
                 @intFromEnum(self.level),
                 null,
                 &self.line_buffer,
             );
         } else {
-            _ = __android_log_write(
+            _ = ndk.__android_log_write(
                 @intFromEnum(self.level),
                 log_tag.ptr,
                 &self.line_buffer,
@@ -82,13 +84,8 @@ fn flush(self: *@This()) void {
     self.line_len = 0;
 }
 
-fn writer(self: *@This()) Writer {
+pub fn writer(self: *@This()) Writer {
     return Writer{ .context = self };
 }
-
-/// Writes the constant string text to the log, with priority prio and tag tag.
-/// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
-/// Source: https://developer.android.com/ndk/reference/group/logging
-extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
 
 const LogWriter_Zig014 = @This();

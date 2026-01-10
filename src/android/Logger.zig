@@ -1,7 +1,8 @@
 //! Logger is a Writer interface that logs out to Android via "__android_log_write" calls
 
 const std = @import("std");
-const ndk = @import("ndk.zig");
+const ndk = @import("ndk");
+const Level = ndk.Level;
 const Writer = std.Io.Writer;
 
 /// Default to the "package" attribute defined in AndroidManifest.xml
@@ -82,35 +83,6 @@ fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Write
     }
     return written;
 }
-
-/// Levels for Android
-pub const Level = enum(u8) {
-    // silent = 8, // Android docs: For internal use only.
-    // Fatal: Android only, for use when aborting
-    fatal = 7, // ANDROID_LOG_FATAL
-    /// Error: something has gone wrong. This might be recoverable or might
-    /// be followed by the program exiting.
-    err = 6, // ANDROID_LOG_ERROR
-    /// Warning: it is uncertain if something has gone wrong or not, but the
-    /// circumstances would be worth investigating.
-    warn = 5, // ANDROID_LOG_WARN
-    /// Info: general messages about the state of the program.
-    info = 4, // ANDROID_LOG_INFO
-    /// Debug: messages only useful for debugging.
-    debug = 3, // ANDROID_LOG_DEBUG
-    // verbose = 2, // ANDROID_LOG_VERBOSE
-    // default = 1, // ANDROID_LOG_DEFAULT
-
-    // Returns a string literal of the given level in full text form.
-    // pub fn asText(comptime self: Level) []const u8 {
-    //     return switch (self) {
-    //         .err => "error",
-    //         .warn => "warning",
-    //         .info => "info",
-    //         .debug => "debug",
-    //     };
-    // }
-};
 
 pub fn logString(android_log_level: Level, text: []const u8) void {
     _ = ndk.__android_log_print(
