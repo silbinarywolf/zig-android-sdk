@@ -1,22 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const ndk = @import("ndk.zig");
-const Logger = @import("Logger.zig");
 const zig014 = @import("zig014");
 const zig015 = @import("zig015");
 const zig016 = @import("zig016");
 
-// TODO(jae): 2024-10-03
-// Consider exposing this in the future
-// pub const builtin = android_builtin;
-
-const android_builtin = struct {
-    const ab = @import("android_builtin");
-
-    /// package name extracted from your AndroidManifest.xml file
-    /// ie. "com.zig.sdl2"
-    pub const package_name: [:0]const u8 = ab.package_name;
-};
+const ndk = @import("ndk.zig");
+const Logger = @import("Logger.zig");
 
 /// Alternate panic implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const panic = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
@@ -51,19 +40,6 @@ fn androidLogFn(
     if (args_type_info != .@"struct") {
         @compileError("expected tuple or struct argument, found " ++ @typeName(ArgsType));
     }
-    const fields_info = args_type_info.@"struct".fields;
-    if (fields_info.len == 0 and
-        comptime std.mem.indexOfScalar(u8, format, '{') == null)
-    {
-        _ = ndk.__android_log_print(
-            @intFromEnum(Logger.Level.fatal),
-            comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
-            "%.*s",
-            format.len,
-            format.ptr,
-        );
-        return;
-    }
 
     const android_log_level: Logger.Level = switch (message_level) {
         //  => .ANDROID_LOG_VERBOSE, // No mapping
@@ -72,6 +48,15 @@ fn androidLogFn(
         .warn => .warn, // android.ANDROID_LOG_WARN = 5,
         .err => .err, // android.ANDROID_LOG_WARN = 6,
     };
+
+    const fields_info = args_type_info.@"struct".fields;
+    if (fields_info.len == 0 and
+        comptime std.mem.indexOfScalar(u8, format, '{') == null)
+    {
+        // If no formatting, log string directly with Android logging
+        _ = Logger.logString(android_log_level, format);
+        return;
+    }
     var buffer: [8192]u8 = undefined;
     var logger = Logger.init(android_log_level, &buffer);
     nosuspend {

@@ -14,7 +14,7 @@ const Writer = std.Io.Writer;
 /// logs with the package name.
 ///
 /// To workaround this, we bake the package name into the Zig binaries.
-pub const tag: [:0]const u8 = @import("android_builtin").package_name;
+const package_name: [:0]const u8 = @import("android_builtin").package_name;
 
 level: Level,
 writer: Writer,
@@ -39,11 +39,11 @@ fn log_each_newline(logger: *Logger, buffer: []const u8) Writer.Error!usize {
     while (std.mem.indexOfScalar(u8, bytes_to_log, '\n')) |newline_pos| {
         const line = bytes_to_log[0..newline_pos];
         bytes_to_log = bytes_to_log[newline_pos + 1 ..];
-        android_log_string(logger.level, line);
+        logString(logger.level, line);
         written += line.len;
     }
     if (bytes_to_log.len == 0) return written;
-    android_log_string(logger.level, bytes_to_log);
+    logString(logger.level, bytes_to_log);
     written += bytes_to_log.len;
     return written;
 }
@@ -112,10 +112,10 @@ pub const Level = enum(u8) {
     // }
 };
 
-fn android_log_string(android_log_level: Level, text: []const u8) void {
+pub fn logString(android_log_level: Level, text: []const u8) void {
     _ = ndk.__android_log_print(
         @intFromEnum(android_log_level),
-        comptime if (tag.len == 0) null else tag.ptr,
+        comptime if (package_name.len == 0) null else package_name.ptr,
         "%.*s",
         text.len,
         text.ptr,
