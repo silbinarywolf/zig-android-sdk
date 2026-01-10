@@ -24,7 +24,7 @@ var panicking = std.atomic.Value(u8).init(0);
 /// This is used to catch and handle panics triggered by the panic handler.
 threadlocal var panic_stage: usize = 0;
 
-fn panic(message: []const u8, ret_addr: ?usize) noreturn {
+pub fn panic(message: []const u8, ret_addr: ?usize) noreturn {
     @branchHint(.cold);
     if (comptime !builtin.abi.isAndroid()) @compileError("do not use Android panic for non-Android builds");
 
