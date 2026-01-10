@@ -7,6 +7,10 @@ const builtin = @import("builtin");
 const windows = std.os.windows;
 const RRF = windows.advapi32.RRF;
 
+const KEY_QUERY_VALUE = 0x0001;
+const KEY_ENUMERATE_SUB_KEYS = 0x0008;
+const KEY_WOW64_32KEY = 0x0200;
+
 const OpenOptions = struct {
     /// Sets the KEY_WOW64_32KEY access flag.
     /// https://learn.microsoft.com/en-us/windows/win32/winprog64/accessing-an-alternate-registry-view
@@ -119,8 +123,8 @@ const RegistryWtf16Le = struct {
     /// After finishing work, call `closeKey`.
     fn openKey(hkey: windows.HKEY, key_wtf16le: [:0]const u16, options: OpenOptions) error{KeyNotFound}!RegistryWtf16Le {
         var key: windows.HKEY = undefined;
-        var access: windows.REGSAM = windows.KEY_QUERY_VALUE | windows.KEY_ENUMERATE_SUB_KEYS;
-        if (options.wow64_32) access |= windows.KEY_WOW64_32KEY;
+        var access: windows.REGSAM = KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS;
+        if (options.wow64_32) access |= KEY_WOW64_32KEY;
         const return_code_int: windows.HRESULT = windows.advapi32.RegOpenKeyExW(
             hkey,
             key_wtf16le,
