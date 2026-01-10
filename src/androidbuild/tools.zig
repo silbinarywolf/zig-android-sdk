@@ -129,9 +129,10 @@ pub fn create(b: *std.Build, options: Options) *Sdk {
         break :cmdlineblk &[0]u8{};
     };
     if (cmdline_tools_path.len == 0) {
-        const message = b.fmt("Android Command Line Tools not found. Expected at: {s} or {s}", .{
+        const message = b.fmt("Android SDK Command-line tools not found in SDK folder. (expected {s} or {s} to exist)\n- This can either be installed via Android Studio\n- or downloaded directly here: {s}", .{
             cmdline_tool_path_list[0],
             cmdline_tool_path_list[1],
+            "https://developer.android.com/studio#command-line-tools-only",
         });
         errors.append(b.allocator, message) catch @panic("OOM");
     }
@@ -533,6 +534,19 @@ const PathSearch = struct {
             const java_home = environ_map.get("JAVA_HOME") orelse &[0]u8{};
             if (java_home.len > 0) {
                 break :jdkpath java_home;
+            }
+            if (host_os_tag == .linux) {
+                // const environ_map = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                //     &b.graph.env_map
+                // else
+                //     &b.graph.environ_map;
+                const maybe_user: ?[]const u8 = environ_map.get("USER") orelse null;
+                if (maybe_user) |user| {
+                    const java = b.findProgram(&.{"jarsigner"}, &.{
+                        b.fmt("/home/{s}/android-studio/jbr/bin", .{user}),
+                    }) catch break :jdkpath null; // TODO: Dont return NULL here
+                    break :jdkpath std.fs.path.dirname(java) orelse null;
+                }
             }
             break :jdkpath null;
         };
