@@ -162,6 +162,9 @@ pub fn build(b: *std.Build) !void {
     //     sdl_c_module.addConfigHeader(config_header);
     // }
     sdl_c_module.addIncludePath(sdl_include_path);
+    if (target.result.abi.isAndroid()) {
+        sdl_c_module.defineCMacro("_Nonnull", "");
+    }
 
     _ = b.addModule("sdl", .{
         .target = target,
@@ -247,7 +250,7 @@ const generic_src_files = [_][]const u8{
     "src/stdlib/SDL_malloc.c",
     "src/stdlib/SDL_mslibc.c",
     "src/stdlib/SDL_qsort.c",
-    "src/stdlib/SDL_stdmod.c",
+    //"src/stdlib/SDL_stdmod.c", // Removed between 2.32.2 and 2.32.10
     "src/stdlib/SDL_string.c",
     "src/stdlib/SDL_strtokr.c",
     "src/thread/SDL_thread.c",

@@ -21,8 +21,8 @@ pub fn build(b: *std.Build) void {
         const android_sdk = android.Sdk.create(b, .{});
         const apk = android_sdk.createApk(.{
             .api_level = .android15,
-            .build_tools_version = "35.0.1",
-            .ndk_version = "29.0.13113456",
+            .build_tools_version = "36.1.0",
+            .ndk_version = "29.0.14206865",
             // NOTE(jae): 2025-03-09
             // Previously this example used 'ndk' "27.0.12077973".
             //
