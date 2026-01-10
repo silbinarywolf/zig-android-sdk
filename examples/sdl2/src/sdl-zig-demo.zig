@@ -14,7 +14,7 @@ pub const std_options: std.Options = if (builtin.abi.isAndroid())
 else
     .{};
 
-/// custom panic handler for Android
+/// Deprecated: Zig 0.15.2 and lower only, Custom panic handler for Android
 pub const panic = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     android.panic
 else
