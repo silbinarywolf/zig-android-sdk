@@ -35,8 +35,16 @@ pub fn build(b: *std.Build) void {
     });
     if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 14) {
         // Add as a module to deal with @Type(.enum_literal) being deprecated
-        module.addImport("LogWriter_Zig014", b.addModule("android", .{
-            .root_source_file = b.path("src/android/LogWriter_Zig014.zig"),
+        module.addImport("zig014", b.addModule("android", .{
+            .root_source_file = b.path("src/android/zig014/zig014.zig"),
+            .target = target,
+            .optimize = optimize,
+        }));
+    }
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor == 15) {
+        // Add as a module to deal with @Type(.enum_literal) being deprecated
+        module.addImport("zig015", b.addModule("android", .{
+            .root_source_file = b.path("src/android/zig015/zig015.zig"),
             .target = target,
             .optimize = optimize,
         }));
