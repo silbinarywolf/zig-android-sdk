@@ -548,7 +548,13 @@ const PathSearch = struct {
                 const maybe_user: ?[]const u8 = environ_map.get("USER") orelse null;
                 if (maybe_user) |user| {
                     const jarsigner_path = b.findProgram(&.{"jarsigner"}, &.{
+                        // NOTE(jae): 2026-01-10
+                        // I manually put my install here, not standard per-se but I see no reason to not support this.
                         b.fmt("/home/{s}/android-studio/jbr/bin", .{user}),
+                        // NOTE(jae): 2026-01-10
+                        // Suggested install locations for Android Studio from: https://developer.android.com/studio/install
+                        "/usr/local/android-studio/jbr/bin", // for your user profile
+                        "/opt/android-studio/jbr/bin", // for shared users
                     }) catch break :jdkpath null; // TODO: Dont return NULL here
                     const jbr_bin_dir = std.fs.path.dirname(jarsigner_path) orelse break :jdkpath null;
                     const jbr_dir = std.fs.path.dirname(jbr_bin_dir) orelse break :jdkpath null;
