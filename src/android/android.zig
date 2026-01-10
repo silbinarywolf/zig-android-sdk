@@ -70,7 +70,7 @@ pub const Level = enum(u8) {
 
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-    @import("zig_014.zig").logFn
+    @import("LogWriter_Zig014").logFn
 else
     AndroidLog.logFn;
 
