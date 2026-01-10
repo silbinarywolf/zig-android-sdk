@@ -1,4 +1,4 @@
-//! Seperate module for Zig 0.15.X functionality as @Type() comptime directive was removed
+//! Seperate module for Zig 0.16.X-dev functionality as @Type() comptime directive was removed
 
 const std = @import("std");
 
