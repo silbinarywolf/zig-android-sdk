@@ -133,8 +133,8 @@ fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
             {
                 if (builtin.single_threaded) {
                     _ = ndk.__android_log_print(
-                        @intFromEnum(Level.fatal),
-                        comptime if (log_tag.len == 0) null else log_tag.ptr,
+                        @intFromEnum(Logger.Level.fatal),
+                        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
                         "panic: %.*s",
                         msg.len,
                         msg.ptr,
@@ -142,8 +142,8 @@ fn panicImpl(first_trace_addr: ?usize, msg: []const u8) noreturn {
                 } else {
                     const current_thread_id: u32 = std.Thread.getCurrentId();
                     _ = ndk.__android_log_print(
-                        @intFromEnum(Level.fatal),
-                        comptime if (log_tag.len == 0) null else log_tag.ptr,
+                        @intFromEnum(Logger.Level.fatal),
+                        comptime if (Logger.tag.len == 0) null else Logger.tag.ptr,
                         "thread %d panic: %.*s",
                         current_thread_id,
                         msg.len,
