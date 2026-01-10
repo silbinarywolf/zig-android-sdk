@@ -1,3 +1,5 @@
+//! NDK functions as defined at: https://developer.android.com/ndk/reference/group/logging
+
 /// Writes the constant string text to the log, with priority prio and tag tag.
 /// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
 /// Source: https://developer.android.com/ndk/reference/group/logging

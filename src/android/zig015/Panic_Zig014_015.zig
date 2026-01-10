@@ -7,11 +7,13 @@
 //! 09-22 13:08:49.637  3390  3390 F com.zig.minimal: ???:?:?: 0x7ccea4021d9c in ??? (libandroid_runtime.so)
 
 const std = @import("std");
+const android = @import("android");
 const builtin = @import("builtin");
 const LogWriter_Zig014 = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
     @import("zig014").LogWriter
 else
     void;
+const Logger = android.Logger;
 
 /// Non-zero whenever the program triggered a panic.
 /// The counter is incremented/decremented atomically.
@@ -218,5 +220,18 @@ fn dumpCurrentStackTrace_014(start_addr: ?usize) void {
         };
     }
 }
+
+const ndk = struct {
+    /// Writes the constant string text to the log, with priority prio and tag tag.
+    /// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+    /// Source: https://developer.android.com/ndk/reference/group/logging
+    pub extern "log" fn __android_log_write(prio: c_int, tag: [*c]const u8, text: [*c]const u8) c_int;
+
+    /// Writes a formatted string to the log, with priority prio and tag tag.
+    /// The details of formatting are the same as for printf(3)
+    /// Returns: 1 if the message was written to the log, or -EPERM if it was not; see __android_log_is_loggable().
+    /// Source: https://man7.org/linux/man-pages/man3/printf.3.html
+    pub extern "log" fn __android_log_print(prio: c_int, tag: [*c]const u8, text: [*c]const u8, ...) c_int;
+};
 
 const Panic = @This();
