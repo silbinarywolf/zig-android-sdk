@@ -28,6 +28,9 @@ pub fn build(b: *std.Build) void {
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
         apk.addResourceDirectory(b.path("android/res"));
 
+        // Assets support - put your textures and sounds here, not in the resources:
+        // apk.addAssetDirectory(b.path("android/assets"));
+
         // Add Java files
         // - If you have 'android:hasCode="false"' in your AndroidManifest.xml then no Java files are required
         //   see: https://developer.android.com/ndk/samples/sample_na
