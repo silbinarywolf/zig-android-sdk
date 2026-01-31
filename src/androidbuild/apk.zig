@@ -363,15 +363,15 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                     aapt2link.addArg("-A");
                     aapt2link.addDirectoryArg(asset_dir_path.source);
 
-                    var asset_dir = try std.fs.cwd().openDir(asset_dir_path.source, .{ .iterate = true });
+                    var asset_dir = std.fs.cwd().openDir(asset_dir_path.source.cwd_relative, .{ .iterate = true }) catch |err| @panic(@errorName(err));
                     defer asset_dir.close();
 
                     var walker = try asset_dir.walk(b.allocator);
                     defer walker.deinit();
 
-                    while (try walker.next()) |entry| {
+                    while (walker.next() catch |err| @panic(@errorName(err))) |entry| {
                         if (entry.kind == .file) {
-                            aapt2link.addFileInput(std.fs.path.join(b.allocator, &.{ asset_dir_path, entry.path }));
+                            aapt2link.addFileInput(try asset_dir_path.source.join(b.allocator, entry.path));
                         }
                     }
                 }
