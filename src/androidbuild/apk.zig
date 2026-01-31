@@ -359,9 +359,21 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // Add assets
         for (apk.assets.items) |asset| {
             switch (asset) {
-                .directory => |asset_dir| {
+                .directory => |asset_dir_path| {
                     aapt2link.addArg("-A");
-                    aapt2link.addDirectoryArg(asset_dir.source);
+                    aapt2link.addDirectoryArg(asset_dir_path.source);
+
+                    var asset_dir = try std.fs.cwd().openDir(asset_dir_path.source, .{ .iterate = true });
+                    defer asset_dir.close();
+
+                    var walker = try asset_dir.walk(b.allocator);
+                    defer walker.deinit();
+
+                    while (try walker.next()) |entry| {
+                        if (entry.kind == .file) {
+                            aapt2link.addFileInput(std.fs.path.join(b.allocator, &.{ asset_dir_path, entry.path }));
+                        }
+                    }
                 }
             }
         }
