@@ -20,8 +20,8 @@ jobs:
   build-stable:
     name: Build Zig Stable
     strategy:
+      max-parallel: 1
       matrix:
-        max-parallel: 1
         include:
           - os: "ubuntu-latest"
           - os: "windows-latest"
@@ -100,7 +100,7 @@ jobs:
 
   build-nightly:
     name: Build Zig Master (Latest Dev)
-    needs: build-stable
+    runs-on: ${{matrix.os}}
     strategy:
       max-parallel: 1
       matrix:
@@ -108,8 +108,6 @@ jobs:
           - os: "ubuntu-latest"
           - os: "windows-latest"
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
-
-    runs-on: ${{matrix.os}}
  
     steps:
     - uses: actions/checkout@v6
@@ -147,15 +145,14 @@ jobs:
     #  working-directory: examples/raylib
   build-previous:
     name: Build Zig 0.14.0 (Previous Stable Release)
+    runs-on: ${{matrix.os}}
     strategy:
+      max-parallel: 1
       matrix:
-        max-parallel: 1
         include:
           - os: "ubuntu-latest"
           - os: "windows-latest"
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
-
-    runs-on: ${{matrix.os}}
  
     steps:
     - uses: actions/checkout@v6
