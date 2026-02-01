@@ -1,5 +1,6 @@
 const std = @import("std");
 const android = @import("android");
+const LinkMode = std.builtin.LinkMode;
 
 const exe_name = "raylib";
 
@@ -51,7 +52,7 @@ pub fn build(b: *std.Build) void {
             b.dependency("raylib_zig", .{
                 .target = target,
                 .optimize = optimize,
-                .linkage = .dynamic,
+                .linkage = LinkMode.dynamic,
             });
 
         app.linkLibrary(raylib_dep.artifact("raylib"));
