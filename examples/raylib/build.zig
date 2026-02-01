@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) void {
         if (android_apk) |apk| {
             const android_dep = b.dependency("android", .{
                 .target = target,
-                .optimize = optimize,
+                .optimize = optimize
             });
             app.addImport("android", android_dep.module("android"));
             app.linkSystemLibrary("android", .{});

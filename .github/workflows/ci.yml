@@ -66,6 +66,9 @@ jobs:
       with:
         version: ${{ needs.setup.outputs.zig-stable-version }}
 
+    - name: Format Check
+      run: zig fmt --check .
+
     - name: Build Minimal Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
