@@ -24,7 +24,7 @@ jobs:
        - run: echo "null"
     outputs:
       java-version: ${{ env.CI_JAVA_VERSION }}
-      android-sdk: ${{ env.CI_JAVA_VERSION }}
+      android-sdk: ${{ env.CI_ANDROID_SDK }}
 
   build-stable:
     name: Build Zig Stable
