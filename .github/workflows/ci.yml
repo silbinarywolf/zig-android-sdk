@@ -19,6 +19,8 @@ env:
   CI_ZIG_STABLE_VERSION: "0.15.1"
 
 jobs:
+  # NOTE(jae): 2026-02-01
+  # Run a Zig format check before any other steps on latest Zig stable
   format:
     name: zig fmt --check
     runs-on: ubuntu-latest
@@ -28,15 +30,18 @@ jobs:
     - name: Setup Zig
       uses: mlugg/setup-zig@v2
 
+    # Run AST check
+    # 
+    # Specifically ignore ./src/android as the runtime has different Zig version for compile-time features
+    # like @EnumLiteral
+    - name: AST Check (src/androidbuild)
+      run: |
+        zig fmt --ast-check ./build.zig
+        zig fmt --ast-check ./src/androidbuild
+
     # Run format check
     - name: Zig Format Check
       run: zig fmt --check .
-
-    # Run AST check
-    - name: AST Check (src/androidbuild)
-      run:
-        - zig fmt --ast-check ./build.zig
-        - zig fmt --ast-check ./src/androidbuild
 
   # https://stackoverflow.com/questions/73797254/environment-variables-in-github-actions
   setup:
