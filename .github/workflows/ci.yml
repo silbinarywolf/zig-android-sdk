@@ -45,6 +45,7 @@ jobs:
 
   # https://stackoverflow.com/questions/73797254/environment-variables-in-github-actions
   setup:
+    name: setup environment variables as outputs
     needs: [format]
     runs-on: ubuntu-latest
     steps:
@@ -57,7 +58,7 @@ jobs:
 
 
   build-stable:
-    name: Build Zig Stable (${{ needs.setup.outputs.zig-stable-version }})
+    name: Build Zig Stable
     needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
@@ -189,7 +190,7 @@ jobs:
     #  run: zig build -Dandroid=true --verbose
     #  working-directory: examples/raylib
   build-previous-stable:
-    name: Build Zig Previous (${{ needs.setup.outputs.zig-previous-stable-version }})
+    name: Build Zig Previous
     needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
