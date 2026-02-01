@@ -17,8 +17,19 @@ env:
   CI_ANDROID_SDK: "tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456"
 
 jobs:
+  # https://stackoverflow.com/questions/73797254/environment-variables-in-github-actions
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+       - run: echo "null"
+    outputs:
+      java-version: ${{ env.CI_JAVA_VERSION }}
+      android-sdk: ${{ env.CI_JAVA_VERSION }}
+
   build-stable:
     name: Build Zig Stable
+    needs: [setup]
+    runs-on: ${{matrix.os}}
     strategy:
       max-parallel: 1
       matrix:
@@ -26,23 +37,23 @@ jobs:
           - os: "ubuntu-latest"
           - os: "windows-latest"
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
-
-    runs-on: ${{matrix.os}}
  
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK
+    # Setup Java and Android SDK
+    - name: Set up JDK ${{ needs.setup.outputs.java-version }}
       uses: actions/setup-java@v5
       with:
-        java-version: ${{CI_JAVA_VERSION}}
+        java-version: ${{ needs.setup.outputs.java-version }}
         distribution: "temurin"
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        packages: "$CI_ANDROID_SDK"
+        packages: ${{ needs.setup.outputs.android-sdk }}
 
+    # Setup Zig version and run examples
     - name: Setup Zig Stable
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
@@ -100,6 +111,7 @@ jobs:
 
   build-nightly:
     name: Build Zig Master (Latest Dev)
+    needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
       max-parallel: 1
@@ -112,18 +124,19 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK
+    # Setup Java and Android SDK
+    - name: Set up JDK ${{ needs.setup.outputs.java-version }}
       uses: actions/setup-java@v5
       with:
-        java-version: ${{CI_JAVA_VERSION}}
+        java-version: ${{ needs.setup.outputs.java-version }}
         distribution: "temurin"
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        # 35.0.0 = Android 15
-        packages: "$CI_ANDROID_SDK"
+        packages: ${{ needs.setup.outputs.android-sdk }}
 
+    # Setup Zig version and run examples
     - name: Setup Zig Nightly
       uses: mlugg/setup-zig@v2
       with:
@@ -145,6 +158,7 @@ jobs:
     #  working-directory: examples/raylib
   build-previous:
     name: Build Zig 0.14.0 (Previous Stable Release)
+    needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
       max-parallel: 1
@@ -157,22 +171,19 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK
+    # Setup Java and Android SDK
+    - name: Set up JDK ${{ needs.setup.outputs.java-version }}
       uses: actions/setup-java@v5
       with:
-        java-version: ${{CI_JAVA_VERSION}}
+        java-version: ${{ needs.setup.outputs.java-version }}
         distribution: "temurin"
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        # 35.0.0 = Android 15
-        packages: "$CI_ANDROID_SDK"
+        packages: ${{ needs.setup.outputs.android-sdk }}
 
-    #
-    # Previous Stable Zig Build
-    #
-
+    # Setup Zig version and run examples
     - name: Setup Zig Previous Stable (0.14.0)
       uses: mlugg/setup-zig@v2
       with:
