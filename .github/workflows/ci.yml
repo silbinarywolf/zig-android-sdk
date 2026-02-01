@@ -15,6 +15,7 @@ env:
   CI_JAVA_VERSION: 17
   # 35.0.0 = Android 15
   CI_ANDROID_SDK: "tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456"
+  CI_ZIG_PREVIOUS_STABLE_VERSION: "0.14.0"
 
 jobs:
   # https://stackoverflow.com/questions/73797254/environment-variables-in-github-actions
@@ -25,6 +26,7 @@ jobs:
     outputs:
       java-version: ${{ env.CI_JAVA_VERSION }}
       android-sdk: ${{ env.CI_ANDROID_SDK }}
+      zig-previous-stable-version: ${{ env.CI_ZIG_PREVIOUS_STABLE_VERSION }}
 
   build-stable:
     name: Build Zig Stable
@@ -110,7 +112,7 @@ jobs:
     #     working-directory: examples/sdl2
 
   build-nightly:
-    name: Build Zig Master (Latest Dev)
+    name: Build Zig Nightly
     needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
@@ -156,8 +158,8 @@ jobs:
     # - name: Build Raylib Example (Zig Nightly)
     #  run: zig build -Dandroid=true --verbose
     #  working-directory: examples/raylib
-  build-previous:
-    name: Build Zig 0.14.0 (Previous Stable Release)
+  build-previous-stable:
+    name: Build Zig Previous (${{ needs.setup.outputs.zig-previous-stable-version }})
     needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
@@ -184,15 +186,15 @@ jobs:
         packages: ${{ needs.setup.outputs.android-sdk }}
 
     # Setup Zig version and run examples
-    - name: Setup Zig Previous Stable (0.14.0)
+    - name: Setup Zig
       uses: mlugg/setup-zig@v2
       with:
-        version: "0.14.0"
+        version: ${{ needs.setup.outputs.zig-previous-stable-version }}
 
-    - name: Build Minimal Example (Zig Previous Stable)
+    - name: Build Minimal Example 
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (Zig Previous Stable)
+    - name: Build SDL2 Example
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
