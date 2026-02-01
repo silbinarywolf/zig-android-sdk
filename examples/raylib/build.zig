@@ -43,11 +43,6 @@ pub fn build(b: *std.Build) void {
             .linkage = .dynamic,
             .name = exe_name,
             .root_module = lib_mod,
-            // note(jae): 2025-09-19
-            // Force use_llvm = true, to workaround issue in Zig 0.15.1 where an error occurs with
-            // - step: compile lib raylib Debug x86_64-linux-android failure
-            //     panic: "TODO unhandled compression scheme"
-            .use_llvm = if (target.result.abi.isAndroid()) true else null,
         });
         b.installArtifact(lib);
 

@@ -94,7 +94,7 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
         .artifacts = .empty,
         .java_files = .empty,
         .resources = .empty,
-        .assets = .empty
+        .assets = .empty,
     };
     return apk;
 }
@@ -362,7 +362,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                 .directory => |asset_dir| {
                     aapt2link.addArg("-A");
                     aapt2link.addDirectoryArg(asset_dir.source);
-                }
+                },
             }
         }
 
@@ -449,6 +449,18 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         const target: ResolvedTarget = artifact.root_module.resolved_target orelse {
             @panic(b.fmt("artifact[{d}] has no 'target' set", .{artifact_index}));
         };
+
+        // NOTE(jae): 2026-02-01
+        // If not explicitly set in users build, default to using LLVM and LLD for Android builds
+        // as that's the same toolchain that the Android SDK uses.
+        //
+        // This also can resolve issues with Zigs linker not yet supporting certain compression schemes/etc
+        if (artifact.use_llvm == null) {
+            artifact.use_llvm = true;
+        }
+        if (artifact.use_lld == null) {
+            artifact.use_lld = true;
+        }
 
         // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
         const so_dir: []const u8 = switch (target.result.cpu.arch) {
