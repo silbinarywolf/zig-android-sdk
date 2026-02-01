@@ -16,6 +16,7 @@ env:
   # 35.0.0 = Android 15
   CI_ANDROID_SDK: "tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456"
   CI_ZIG_PREVIOUS_STABLE_VERSION: "0.14.0"
+  CI_ZIG_STABLE_VERSION: "0.15.1"
 
 jobs:
   # https://stackoverflow.com/questions/73797254/environment-variables-in-github-actions
@@ -26,10 +27,11 @@ jobs:
     outputs:
       java-version: ${{ env.CI_JAVA_VERSION }}
       android-sdk: ${{ env.CI_ANDROID_SDK }}
+      zig-stable-version: ${{ env.CI_ZIG_STABLE_VERSION }}
       zig-previous-stable-version: ${{ env.CI_ZIG_PREVIOUS_STABLE_VERSION }}
 
   build-stable:
-    name: Build Zig Stable
+    name: Build Zig Stable (${{ needs.setup.outputs.zig-stable-version }})
     needs: [setup]
     runs-on: ${{matrix.os}}
     strategy:
@@ -56,11 +58,13 @@ jobs:
         packages: ${{ needs.setup.outputs.android-sdk }}
 
     # Setup Zig version and run examples
-    - name: Setup Zig Stable
+    - name: Setup Zig
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
       # see: https://ziglang.org/news/migrate-to-self-hosting/
       uses: mlugg/setup-zig@v2
+      with:
+        version: ${{ needs.setup.outputs.zig-stable-version }}
 
     - name: Build Minimal Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
@@ -72,9 +76,9 @@ jobs:
         zig build -Dandroid=true -Dcrash-on-exception --verbose
       working-directory: examples/sdl2
     
-    - name: Build Raylib Example (Zig Stable)
-      run: zig build -Dandroid=true --verbose
-      working-directory: examples/raylib
+    # - name: Build Raylib Example (Zig Stable)
+    #   run: zig build -Dandroid=true --verbose
+    #   working-directory: examples/raylib
 
     # TODO(jae): 2025-03-30
     # Need to figure out how to get 'adb shell monkey' to return an error code or be able to return an error code

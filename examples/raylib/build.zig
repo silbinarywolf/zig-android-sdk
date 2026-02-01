@@ -1,5 +1,5 @@
-const android = @import("android");
 const std = @import("std");
+const android = @import("android");
 
 const exe_name = "raylib";
 
@@ -33,18 +33,12 @@ pub fn build(b: *std.Build) void {
     };
 
     for (targets) |target| {
-        const lib_mod = b.createModule(.{
+        const app = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
             .optimize = optimize,
             .link_libc = true,
         });
-        const lib = b.addLibrary(.{
-            .linkage = .dynamic,
-            .name = exe_name,
-            .root_module = lib_mod,
-        });
-        b.installArtifact(lib);
 
         const raylib_dep = if (android_apk) |apk|
             b.dependency("raylib_zig", .{
@@ -57,28 +51,31 @@ pub fn build(b: *std.Build) void {
             b.dependency("raylib_zig", .{
                 .target = target,
                 .optimize = optimize,
-                .linkage = std.builtin.LinkMode.dynamic,
+                .linkage = .dynamic,
             });
 
-        const raylib_artifact = raylib_dep.artifact("raylib");
-        lib.root_module.linkLibrary(raylib_artifact);
-        const raylib_mod = raylib_dep.module("raylib");
-        lib.root_module.addImport("raylib", raylib_mod);
+        app.linkLibrary(raylib_dep.artifact("raylib"));
+        app.addImport("raylib", raylib_dep.module("raylib"));
 
         if (android_apk) |apk| {
             const android_dep = b.dependency("android", .{
                 .target = target,
                 .optimize = optimize,
             });
-            lib.root_module.addImport("android", android_dep.module("android"));
-            lib.root_module.linkSystemLibrary("android", .{});
+            app.addImport("android", android_dep.module("android"));
+            app.linkSystemLibrary("android", .{});
 
             const native_app_glue_dir: std.Build.LazyPath = .{ .cwd_relative = b.fmt("{s}/sources/android/native_app_glue", .{apk.ndk.path}) };
-            lib.root_module.addCSourceFile(.{ .file = native_app_glue_dir.path(b, "android_native_app_glue.c") });
-            lib.root_module.addIncludePath(native_app_glue_dir);
-            apk.addArtifact(lib);
+            app.addCSourceFile(.{ .file = native_app_glue_dir.path(b, "android_native_app_glue.c") });
+            app.addIncludePath(native_app_glue_dir);
+
+            apk.addArtifact(b.addLibrary(.{
+                .linkage = .dynamic,
+                .name = exe_name,
+                .root_module = app,
+            }));
         } else {
-            const exe = b.addExecutable(.{ .name = exe_name, .root_module = lib_mod });
+            const exe = b.addExecutable(.{ .name = exe_name, .root_module = app });
             b.installArtifact(exe);
 
             const run_exe = b.addRunArtifact(exe);
