@@ -32,10 +32,10 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK $CI_JAVA_VERSION
+    - name: Set up JDK ${{CI_JAVA_VERSION}}
       uses: actions/setup-java@v5
       with:
-        java-version: $CI_JAVA_VERSION
+        java-version: ${{CI_JAVA_VERSION}}
         distribution: "temurin"
 
     - name: Setup Android SDK
@@ -112,10 +112,10 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK $CI_JAVA_VERSION
+    - name: Set up JDK ${{CI_JAVA_VERSION}}
       uses: actions/setup-java@v5
       with:
-        java-version: '$CI_JAVA_VERSION'
+        java-version: ${{CI_JAVA_VERSION}}
         distribution: 'temurin'
 
     - name: Setup Android SDK
@@ -157,11 +157,11 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK $CI_JAVA_VERSION
+    - name: Set up JDK ${{CI_JAVA_VERSION}}
       uses: actions/setup-java@v5
       with:
-        java-version: '$CI_JAVA_VERSION'
-        distribution: 'temurin'
+        java-version: ${{CI_JAVA_VERSION}}
+        distribution: "temurin"
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
