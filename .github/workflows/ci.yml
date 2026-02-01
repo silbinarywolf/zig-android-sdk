@@ -11,11 +11,17 @@ concurrency:
   group: ${{ github.head_ref || github.run_id }}-${{ github.actor }}
   cancel-in-progress: true
 
+env:
+  CI_JAVA_VERSION: 17
+  # 35.0.0 = Android 15
+  CI_ANDROID_SDK: "tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456"
+
 jobs:
-  build:
-    name: Build
+  build-stable:
+    name: Build Zig Stable
     strategy:
       matrix:
+        max-parallel: 1
         include:
           - os: "ubuntu-latest"
           - os: "windows-latest"
@@ -26,29 +32,22 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Set up JDK 17
+    - name: Set up JDK $CI_JAVA_VERSION
       uses: actions/setup-java@v5
       with:
-        java-version: '17'
-        distribution: 'temurin'
+        java-version: $CI_JAVA_VERSION
+        distribution: "temurin"
 
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       with:
-        # 35.0.0 = Android 15
-        packages: 'tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456'
+        packages: "$CI_ANDROID_SDK"
 
-    #
-    # Stable Zig Builds
-    #
-
-    - name: Setup Zig Stable (0.15.2)
+    - name: Setup Zig Stable
       # note(jae): 2024-09-15
       # Uses download mirror first as preferred by Zig Foundation
       # see: https://ziglang.org/news/migrate-to-self-hosting/
       uses: mlugg/setup-zig@v2
-      with:
-        version: "0.15.2"
 
     - name: Build Minimal Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
@@ -99,31 +98,33 @@ jobs:
     #       adb shell monkey --kill-process-after-error --monitor-native-crashes --pct-touch 100 -p com.zig.sdl2 --throttle 1000 -v 2
     #     working-directory: examples/sdl2
 
-    #
-    # Previous Stable Zig Build
-    #
+  build-nightly:
+    name: Build Zig Master (Latest Dev)
+    needs: build-stable
+    strategy:
+      max-parallel: 1
+      matrix:
+        include:
+          - os: "ubuntu-latest"
+          - os: "windows-latest"
+          - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
 
-    - name: Setup Zig Previous Stable (0.14.0)
-      uses: mlugg/setup-zig@v2
+    runs-on: ${{matrix.os}}
+ 
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up JDK $CI_JAVA_VERSION
+      uses: actions/setup-java@v5
       with:
-        version: "0.14.0"
+        java-version: '$CI_JAVA_VERSION'
+        distribution: 'temurin'
 
-    - name: Build Minimal Example (Zig Previous Stable)
-      run: zig build -Dandroid=true --verbose
-      working-directory: examples/minimal
-
-    - name: Build SDL2 Example (Zig Previous Stable)
-      run: zig build -Dandroid=true --verbose
-      working-directory: examples/sdl2
-
-    # "Raylib requires zig version 0.15.1" error occurs
-    # - name: Build Raylib Example (Zig Previous Stable)
-    #   run: zig build -Dandroid=true --verbose
-    #   working-directory: examples/raylib
-
-    #
-    # Nightly Zig Builds
-    #
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        # 35.0.0 = Android 15
+        packages: "$CI_ANDROID_SDK"
 
     - name: Setup Zig Nightly
       uses: mlugg/setup-zig@v2
@@ -144,3 +145,46 @@ jobs:
     # - name: Build Raylib Example (Zig Nightly)
     #  run: zig build -Dandroid=true --verbose
     #  working-directory: examples/raylib
+  build-previous:
+    name: Build Zig 0.14.0 (Previous Stable Release)
+    strategy:
+      matrix:
+        max-parallel: 1
+        include:
+          - os: "ubuntu-latest"
+          - os: "windows-latest"
+          - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
+
+    runs-on: ${{matrix.os}}
+ 
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up JDK $CI_JAVA_VERSION
+      uses: actions/setup-java@v5
+      with:
+        java-version: '$CI_JAVA_VERSION'
+        distribution: 'temurin'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        # 35.0.0 = Android 15
+        packages: "$CI_ANDROID_SDK"
+
+    #
+    # Previous Stable Zig Build
+    #
+
+    - name: Setup Zig Previous Stable (0.14.0)
+      uses: mlugg/setup-zig@v2
+      with:
+        version: "0.14.0"
+
+    - name: Build Minimal Example (Zig Previous Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/minimal
+
+    - name: Build SDL2 Example (Zig Previous Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/sdl2
