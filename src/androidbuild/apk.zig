@@ -359,10 +359,33 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // Add assets
         for (apk.assets.items) |asset| {
             switch (asset) {
-                .directory => |asset_dir| {
+                .directory => |asset_dir_path| {
                     aapt2link.addArg("-A");
-                    aapt2link.addDirectoryArg(asset_dir.source);
-                },
+                    aapt2link.addDirectoryArg(asset_dir_path.source);
+
+                    const cwd = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) std.fs.cwd() else std.Io.Dir.cwd();
+
+                    var asset_dir = (
+                        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                            cwd.openDir(asset_dir_path.source.cwd_relative, .{ .iterate = true })
+                        else
+                            cwd.openDir(b.graph.io, asset_dir_path.source.cwd_relative, .{ .iterate = true })
+                    ) catch |err| @panic(@errorName(err));
+
+                    defer if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) asset_dir.close() else asset_dir.close(b.graph.io);
+
+                    var walker = try asset_dir.walk(b.allocator);
+                    defer walker.deinit();
+
+                    while ((
+                        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+                            walker.next()
+                        else
+                            walker.next(b.graph.io)
+                    ) catch |err| @panic(@errorName(err))) |entry| {
+                        if (entry.kind == .file) aapt2link.addFileInput(try asset_dir_path.source.join(b.allocator, entry.path));
+                    }
+                }
             }
         }
 
