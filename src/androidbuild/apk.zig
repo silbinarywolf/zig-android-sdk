@@ -363,13 +363,11 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                     aapt2link.addArg("-A");
                     aapt2link.addDirectoryArg(asset_dir_path.source);
 
-                    const cwd = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) std.fs.cwd() else std.Io.Dir.cwd();
-
                     var asset_dir = (
                         if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
-                            cwd.openDir(asset_dir_path.source.cwd_relative, .{ .iterate = true })
+                            asset_dir_path.source.getPath3(b, null).openDir("", .{ .iterate = true })
                         else
-                            cwd.openDir(b.graph.io, asset_dir_path.source.cwd_relative, .{ .iterate = true })
+                            (asset_dir_path.source.getPath4(b, null) catch |err| @panic(@errorName(err))).openDir(b.graph.io, "", .{ .iterate = true })
                     ) catch |err| @panic(@errorName(err));
 
                     defer if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) asset_dir.close() else asset_dir.close(b.graph.io);
