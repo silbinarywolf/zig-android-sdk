@@ -41,7 +41,10 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const builtin_options_update: *BuiltinOptionsUpdate = @fieldParentPtr("step", step);
     const options = builtin_options_update.options;
 
-    const package_name_path = builtin_options_update.package_name_stdout.getPath3(b, step);
+    const package_name_path = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        builtin_options_update.package_name_stdout.getPath3(b, step)
+    else
+        try builtin_options_update.package_name_stdout.getPath4(b, step);
 
     // Read package name from stdout and strip line feed / carriage return
     // ie. "com.zig.sdl2\n\r"
