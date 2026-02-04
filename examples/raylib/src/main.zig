@@ -19,8 +19,8 @@ pub fn main() !void {
     }
 }
 
-/// Deprecated: Zig 0.15.2 and lower only, Custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+/// Custom panic handler for Android
+pub const panic = if (builtin.abi.isAndroid())
     android.panic
 else
     std.debug.FullPanic(std.debug.defaultPanic);

@@ -14,8 +14,8 @@ pub const std_options: std.Options = if (builtin.abi.isAndroid())
 else
     .{};
 
-/// Deprecated: Zig 0.15.2 and lower only, Custom panic handler for Android
-pub const panic = if (builtin.abi.isAndroid() and builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+// Custom panic handler for Android
+pub const panic = if (builtin.abi.isAndroid())
     android.panic
 else
     std.debug.FullPanic(std.debug.defaultPanic);
@@ -28,24 +28,23 @@ comptime {
 
 /// This needs to be exported for Android builds
 fn SDL_main() callconv(.c) void {
-    if (comptime builtin.abi.isAndroid()) {
-        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
-            _ = std.start.callMain();
-        } else if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
-            main() catch |err| {
-                log.err("{s}", .{@errorName(err)});
-                if (@errorReturnTrace()) |trace| {
-                    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
-                        std.debug.dumpStackTrace(trace.*);
-                    } else {
-                        std.debug.dumpStackTrace(trace);
-                    }
-                }
-            };
-        }
-    } else {
+    if (!comptime builtin.abi.isAndroid()) {
         @compileError("SDL_main should not be called outside of Android builds");
     }
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
+        _ = std.start.callMain();
+        return;
+    }
+    main() catch |err| {
+        log.err("{s}", .{@errorName(err)});
+        if (@errorReturnTrace()) |trace| {
+            if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
+                std.debug.dumpStackTrace(trace.*);
+            } else {
+                std.debug.dumpStackTrace(trace);
+            }
+        }
+    };
 }
 
 pub fn main() !void {

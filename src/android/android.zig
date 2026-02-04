@@ -13,7 +13,7 @@ const Level = ndk.Level;
 pub const panic = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
     std.debug.FullPanic(@import("Zig015_Panic.zig").panic)
 else
-    @compileError("Android panic handler is no longer maintained as of Zig 0.16.x-dev");
+    std.debug.FullPanic(zig016.panic);
 
 /// Alternate log function implementation that calls __android_log_write so that you can see the logging via "adb logcat"
 pub const logFn = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
