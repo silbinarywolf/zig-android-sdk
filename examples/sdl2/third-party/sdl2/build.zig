@@ -266,7 +266,7 @@ const generic_src_files = [_][]const u8{
     "src/stdlib/SDL_malloc.c",
     "src/stdlib/SDL_mslibc.c",
     "src/stdlib/SDL_qsort.c",
-    //"src/stdlib/SDL_stdmod.c", // Removed between 2.32.2 and 2.32.10
+    "src/stdlib/SDL_stdlib.c", // "src/stdlib/SDL_stdmod.c", // Renamed between 2.32.2 and 2.32.10
     "src/stdlib/SDL_string.c",
     "src/stdlib/SDL_strtokr.c",
     "src/thread/SDL_thread.c",

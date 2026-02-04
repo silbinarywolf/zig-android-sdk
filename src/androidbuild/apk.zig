@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 const Sdk = @import("tools.zig");
 const BuiltinOptionsUpdate = @import("builtin_options_update.zig");
+const DirectoryFileInput = @import("DirectoryFileInput.zig");
 
 const Ndk = @import("Ndk.zig");
 const BuildTools = @import("BuildTools.zig");
@@ -362,28 +363,8 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                 .directory => |asset_dir_path| {
                     aapt2link.addArg("-A");
                     aapt2link.addDirectoryArg(asset_dir_path.source);
-
-                    var asset_dir = (
-                        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
-                            asset_dir_path.source.getPath3(b, null).openDir("", .{ .iterate = true })
-                        else
-                            (asset_dir_path.source.getPath4(b, null) catch |err| @panic(@errorName(err))).openDir(b.graph.io, "", .{ .iterate = true })
-                    ) catch |err| @panic(@errorName(err));
-
-                    defer if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) asset_dir.close() else asset_dir.close(b.graph.io);
-
-                    var walker = try asset_dir.walk(b.allocator);
-                    defer walker.deinit();
-
-                    while ((
-                        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
-                            walker.next()
-                        else
-                            walker.next(b.graph.io)
-                    ) catch |err| @panic(@errorName(err))) |entry| {
-                        if (entry.kind == .file) aapt2link.addFileInput(try asset_dir_path.source.join(b.allocator, entry.path));
-                    }
-                }
+                    DirectoryFileInput.create(b, aapt2link, asset_dir_path.source);
+                },
             }
         }
 
@@ -404,6 +385,7 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
                         // add directory
                         aapt2compile.addArg("--dir");
                         aapt2compile.addDirectoryArg(resource_directory.source);
+                        DirectoryFileInput.create(b, aapt2compile, resource_directory.source);
 
                         aapt2compile.addArg("-o");
                         const resources_flat_zip_file = aapt2compile.addOutputFileArg("resource_dir.flat.zip");
