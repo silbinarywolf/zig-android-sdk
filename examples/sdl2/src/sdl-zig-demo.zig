@@ -69,11 +69,12 @@ pub fn main() !void {
     };
     defer sdl.SDL_DestroyRenderer(renderer);
 
-    const zig_bmp = @embedFile("zig.bmp");
-    const rw = sdl.SDL_RWFromConstMem(zig_bmp, zig_bmp.len) orelse {
-        log.info("Unable to get RWFromConstMem: {s}", .{sdl.SDL_GetError()});
-        return error.SDLInitializationFailed;
-    };
+    const rw = sdl.SDL_RWFromFile(if (builtin.abi.isAndroid())
+        // For Android, we setup the build to dynamically add "zig.bmp" to the Android assets folder
+        // so it's accessible without "src/" prefix
+        "zig.bmp"
+    else
+        "src/zig.bmp", "rb");
     defer assert(sdl.SDL_RWclose(rw) == 0);
 
     const zig_surface = sdl.SDL_LoadBMP_RW(rw, 0) orelse {

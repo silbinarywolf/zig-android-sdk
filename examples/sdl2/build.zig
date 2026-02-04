@@ -37,6 +37,10 @@ pub fn build(b: *std.Build) void {
         const key_store_file = android_sdk.createKeyStore(.example);
         apk.setKeyStore(key_store_file);
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
+
+        const generated_asset_dir = b.addNamedWriteFiles("android_asset_directory");
+        _ = generated_asset_dir.addCopyFile(b.path("src/zig.bmp"), "zig.bmp");
+        apk.addAssetDirectory(generated_asset_dir.getDirectory());
         apk.addResourceDirectory(b.path("android/res"));
 
         // Add Java files
