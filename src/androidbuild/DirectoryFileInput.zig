@@ -44,7 +44,10 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const self: *DirectoryFileInput = @fieldParentPtr("step", step);
 
     const run = self.run;
-    const dir_path = self.dir.getPath3(b, step);
+    const dir_path = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        self.dir.getPath3(b, step)
+    else
+        try self.dir.getPath4(b, step);
 
     // NOTE(jae): 2025-07-23
     // As of Zig 0.15.0-dev.1092+d772c0627, package_name_path.openDir("") is not possible as it assumes you're appending a sub-path

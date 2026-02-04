@@ -48,7 +48,10 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const glob: *@This() = @fieldParentPtr("step", step);
     const d8 = glob.run;
 
-    const search_dir = glob.dir.getPath3(b, step);
+    const search_dir = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
+        glob.dir.getPath3(b, step)
+    else
+        try glob.dir.getPath4(b, step);
 
     // NOTE(jae): 2024-09-22
     // Change current working directory to where the Java classes are
