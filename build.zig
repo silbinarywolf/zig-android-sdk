@@ -76,6 +76,8 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        zig016.addImport("ndk", ndk_module);
+        zig016.addImport("android_builtin", android_builtin_module);
         android_module.addImport("zig016", zig016);
     }
 
