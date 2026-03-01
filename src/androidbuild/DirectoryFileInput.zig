@@ -48,7 +48,11 @@ pub fn create(owner: *Build, run: *Run, dir: LazyPath) void {
 
 fn make(step: *Step, options: Build.Step.MakeOptions) !void {
     const b = step.owner;
-    const gpa = options.gpa;
+    const gpa = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
+        // Deprecated: Zig 0.14.X doesn't have options.gpa
+        b.allocator
+    else
+        options.gpa;
     const arena = b.allocator;
     const self: *DirectoryFileInput = @fieldParentPtr("step", step);
     const run = self.run;
