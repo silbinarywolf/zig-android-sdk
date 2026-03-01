@@ -1,15 +1,14 @@
 //! BuiltinOptionsUpdate will update the *Options
 
-const std = @import("std");
 const androidbuild = @import("androidbuild.zig");
 const builtin = @import("builtin");
-const Build = std.Build;
+const Build = @import("std").Build;
 const Step = Build.Step;
 const Options = Build.Step.Options;
 const LazyPath = Build.LazyPath;
-const fs = std.fs;
-const mem = std.mem;
-const assert = std.debug.assert;
+const fs = @import("std").fs;
+const mem = @import("std").mem;
+const assert = @import("std").debug.assert;
 
 pub const base_id: Step.Id = .custom;
 
@@ -18,7 +17,9 @@ step: Step,
 options: *Options,
 package_name_stdout: LazyPath,
 
-pub fn create(owner: *std.Build, options: *Options, package_name_stdout: LazyPath) void {
+pub fn create(owner: *Build, package_name_stdout: LazyPath) *BuiltinOptionsUpdate {
+    const options = Build.addOptions(owner);
+
     const builtin_options_update = owner.allocator.create(BuiltinOptionsUpdate) catch @panic("OOM");
     builtin_options_update.* = .{
         .step = Step.init(.{
@@ -34,12 +35,25 @@ pub fn create(owner: *std.Build, options: *Options, package_name_stdout: LazyPat
     options.step.dependOn(&builtin_options_update.step);
     // Depend on package name stdout before running this step
     package_name_stdout.addStepDependencies(&builtin_options_update.step);
+    return builtin_options_update;
+}
+
+pub fn createModule(self: *BuiltinOptionsUpdate) *Build.Module {
+    return self.options.createModule();
 }
 
 fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     const b = step.owner;
     const builtin_options_update: *BuiltinOptionsUpdate = @fieldParentPtr("step", step);
     const options = builtin_options_update.options;
+
+    // If using --watch and the user updated AndroidManifest.xml, this step can be re-triggered.
+    //
+    // To avoid appending multiple "package_name = " lines to the output module, we need to clear it if
+    // the options step has any contents
+    if (options.contents.items.len > 0) {
+        options.contents.clearRetainingCapacity();
+    }
 
     const package_name_path = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
         builtin_options_update.package_name_stdout.getPath3(b, step)
@@ -56,9 +70,9 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     else
         try package_name_path.root_dir.handle.readFile(b.graph.io, package_name_path.sub_path, package_name_backing_buf);
     const package_name_stripped = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14)
-        std.mem.trimRight(u8, package_name_filedata, " \r\n")
+        mem.trimRight(u8, package_name_filedata, " \r\n")
     else
-        std.mem.trimEnd(u8, package_name_filedata, " \r\n");
+        mem.trimEnd(u8, package_name_filedata, " \r\n");
     const package_name: [:0]const u8 = try b.allocator.dupeZ(u8, package_name_stripped);
 
     options.addOption([:0]const u8, "package_name", package_name);
