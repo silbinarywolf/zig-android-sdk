@@ -21,10 +21,18 @@ run: *Build.Step.Run,
 /// The directory that will contain the files to glob
 dir: LazyPath,
 
+/// Track the files added to the Run step for --watch
+argv_range: ?ArgRange,
+
 const file_ext = ".class";
 
+const ArgRange = struct {
+    start: usize,
+    end: usize,
+};
+
 /// Creates a D8Glob step which is used to collect all *.class output files after a javac process generates them
-pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
+pub fn create(owner: *std.Build, run: *Run, dir: LazyPath, root_jar: LazyPath) void {
     const glob = owner.allocator.create(@This()) catch @panic("OOM");
     glob.* = .{
         .step = Step.init(.{
@@ -35,18 +43,30 @@ pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
         }),
         .run = run,
         .dir = dir,
+        .argv_range = null,
     };
     // Run step relies on this finishing
     run.step.dependOn(&glob.step);
     // If dir is generated then this will wait for that dir to generate
     dir.addStepDependencies(&glob.step);
+    // If root_jar changes, then this should trigger
+    root_jar.addStepDependencies(&glob.step);
 }
 
-fn make(step: *Step, _: Build.Step.MakeOptions) !void {
+fn make(step: *Step, options: Build.Step.MakeOptions) !void {
+    _ = options;
     const b = step.owner;
     const arena = b.allocator;
+    const gpa = b.allocator;
     const glob: *@This() = @fieldParentPtr("step", step);
+
     const d8 = glob.run;
+
+    // Triggers on --watch if a Java file is modified.
+    // For example: ZigSDLActivity.java
+    if (glob.argv_range) |argv_range| {
+        try d8.argv.replaceRange(d8.step.owner.allocator, argv_range.start, argv_range.end - argv_range.start, &.{});
+    }
 
     const search_dir = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
         glob.dir.getPath3(b, step)
@@ -76,6 +96,7 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     else
         dir.close(b.graph.io);
 
+    var optional_argv_start: ?usize = null;
     var walker = try dir.walk(arena);
     defer walker.deinit();
     while (if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
@@ -92,16 +113,29 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
         // - !std.mem.containsAtLeast(u8, entry.basename, 1, "$") and
         // - !std.mem.containsAtLeast(u8, entry.basename, 1, "_API")
         if (std.mem.endsWith(u8, entry.path, file_ext)) {
+            const absolute_file_path = try search_dir.root_dir.join(gpa, &.{ search_dir.sub_path, entry.path });
+            const relative_to_dir_path = absolute_file_path[search_dir.sub_path.len + 1 ..];
             // NOTE(jae): 2024-09-22
             // We set the current working directory to "glob.Dir" and then make arguments be
             // relative to that directory.
             //
             // This is to avoid the Java error "command line too long" that can occur with d8
-            d8.addArg(entry.path);
+            if (optional_argv_start == null) {
+                optional_argv_start = d8.argv.items.len;
+            }
             d8.addFileInput(LazyPath{
-                .cwd_relative = try search_dir.root_dir.join(b.allocator, &.{ search_dir.sub_path, entry.path }),
+                .cwd_relative = absolute_file_path,
             });
+            d8.addArg(relative_to_dir_path);
         }
+    }
+
+    // Track arguments added to "d8" so that we can remove them if "make" is re-run in --watch mode
+    if (optional_argv_start) |argv_start| {
+        glob.argv_range = .{
+            .start = argv_start,
+            .end = d8.argv.items.len,
+        };
     }
 }
 

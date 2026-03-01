@@ -15,6 +15,7 @@ const getAndroidTriple = androidbuild.getAndroidTriple;
 const runNameContext = androidbuild.runNameContext;
 const printErrorsAndExit = androidbuild.printErrorsAndExit;
 
+const Allocator = std.mem.Allocator;
 const Target = std.Target;
 const Step = std.Build.Step;
 const ResolvedTarget = std.Build.ResolvedTarget;
@@ -219,7 +220,7 @@ pub fn addInstallApk(apk: *Apk) *Step.InstallFile {
     };
 }
 
-fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
+fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     const b = apk.b;
 
     const key_store: KeyStore = apk.key_store orelse .empty;
@@ -299,12 +300,14 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
     };
 
     // ie. "$ANDROID_HOME/Sdk/platforms/android-{api_level}/android.jar"
-    const root_jar = b.pathResolve(&[_][]const u8{
-        apk.sdk.android_sdk_path,
-        "platforms",
-        b.fmt("android-{d}", .{@intFromEnum(apk.api_level)}),
-        "android.jar",
-    });
+    const root_jar: LazyPath = .{
+        .cwd_relative = b.pathResolve(&[_][]const u8{
+            apk.sdk.android_sdk_path,
+            "platforms",
+            b.fmt("android-{d}", .{@intFromEnum(apk.api_level)}),
+            "android.jar",
+        }),
+    };
 
     // Make resources.apk from:
     // - resources.flat.zip (created from "aapt2 compile")
@@ -319,10 +322,12 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         const aapt2link = b.addSystemCommand(&[_][]const u8{
             apk.build_tools.aapt2,
             "link",
-            "-I", // add an existing package to base include set
-            root_jar,
         });
         aapt2link.setName(runNameContext("aapt2 link"));
+
+        // Add '-I android_sdk/platforms/android_version/android.jar'
+        aapt2link.addArg("-I");
+        aapt2link.addFileArg(root_jar);
 
         if (b.verbose) {
             aapt2link.addArg("-v");
@@ -552,13 +557,20 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
             // Source: https://github.com/libsdl-org/SDL/blob/release-2.30.7/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java#L2045
             "-encoding",
             "utf8",
-            "-cp",
-            root_jar,
-            // NOTE(jae): 2024-09-19
-            // Debug issues with the SDL.java classes
-            // "-Xlint:deprecation",
         });
         javac_cmd.setName(runNameContext("javac"));
+
+        // Add root jar
+        javac_cmd.addArg("-cp");
+        javac_cmd.addFileArg(root_jar);
+
+        // NOTE(jae): 2026-03-01
+        // If we have verbose logging on, telling us about deprecated Java files
+        if (b.verbose) {
+            javac_cmd.addArg("-Xlint:deprecation");
+        }
+
+        // Output directory
         javac_cmd.addArg("-d");
         const java_classes_output_dir = javac_cmd.addOutputDirectoryArg("android_classes");
 
@@ -574,23 +586,8 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         });
         d8.setName(runNameContext("d8"));
 
-        // Prepend JDK bin path so d8 can always find "java", etc
-        if (apk.sdk.jdk_path.len > 0) {
-            var env_map = d8.getEnvMap();
-            const path = env_map.get("PATH") orelse &[0]u8{};
-            const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
-                b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
-                path,
-            });
-            try env_map.put("PATH", new_path);
-        }
-
-        // ie. android_sdk/platforms/android-{api-level}/android.jar
-        d8.addArg("--lib");
-        d8.addArg(root_jar);
-
-        d8.addArg("--output");
-        const dex_output_dir = d8.addOutputDirectoryArg("android_dex");
+        // Add JDK bin path so d8 can always find "java", etc
+        try apk.updatePathWithJdk(d8);
 
         // NOTE(jae): 2024-09-22
         // As per documentation for d8, we may want to specific the minimum API level we want
@@ -599,7 +596,14 @@ fn doInstallApk(apk: *Apk) std.mem.Allocator.Error!*Step.InstallFile {
         // d8.addArg(number_as_string);
 
         // add each output *.class file
-        D8Glob.create(b, d8, java_classes_output_dir);
+        D8Glob.create(b, d8, java_classes_output_dir, root_jar);
+
+        // ie. android_sdk/platforms/android-{api-level}/android.jar
+        d8.addArg("--lib");
+        d8.addFileArg(root_jar);
+
+        d8.addArg("--output");
+        const dex_output_dir = d8.addOutputDirectoryArg("android_dex");
         const dex_file = dex_output_dir.path(b, "classes.dex");
 
         // Append classes.dex to apk
@@ -949,18 +953,23 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
 }
 
 /// Prepend JDK bin path so "d8", "apksigner", etc can always find "java"
-fn updatePathWithJdk(apk: *Apk, run: *std.Build.Step.Run) !void {
+fn updatePathWithJdk(apk: *Apk, run: *std.Build.Step.Run) Allocator.Error!void {
     if (apk.sdk.jdk_path.len == 0) return;
 
     const b = apk.b;
 
-    var env_map = run.getEnvMap();
-    const path = env_map.get("PATH") orelse &[0]u8{};
-    const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
-        b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
-        path,
-    });
-    try env_map.put("PATH", new_path);
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
+        // Deprecated path: Add "java" path to env
+        var env_map = run.getEnvMap();
+        const path = env_map.get("PATH") orelse &[0]u8{};
+        const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
+            b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
+            path,
+        });
+        try env_map.put("PATH", new_path);
+    } else {
+        run.addPathDir(b.pathJoin(&.{ apk.sdk.jdk_path, "bin" }));
+    }
 }
 
 const Apk = @This();
