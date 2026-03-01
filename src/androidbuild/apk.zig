@@ -423,8 +423,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     };
 
     const android_builtin = blk: {
-        const android_builtin_options = std.Build.addOptions(b);
-        BuiltinOptionsUpdate.create(b, android_builtin_options, package_name_file);
+        const android_builtin_options = BuiltinOptionsUpdate.create(b, package_name_file);
         break :blk android_builtin_options.createModule();
     };
 
