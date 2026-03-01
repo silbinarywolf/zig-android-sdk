@@ -58,7 +58,6 @@ fn make(step: *Step, options: Build.Step.MakeOptions) !void {
     _ = options;
     const b = step.owner;
     const arena = b.allocator;
-    const gpa = b.allocator;
     const self: *D8Glob = @fieldParentPtr("step", step);
 
     const d8 = self.run;
@@ -132,7 +131,7 @@ fn make(step: *Step, options: Build.Step.MakeOptions) !void {
                 // - !std.mem.containsAtLeast(u8, entry.basename, 1, "$") and
                 // - !std.mem.containsAtLeast(u8, entry.basename, 1, "_API")
                 if (std.mem.endsWith(u8, entry.path, file_ext)) {
-                    const absolute_file_path = try search_dir.root_dir.join(gpa, &.{ search_dir.sub_path, entry.path });
+                    const absolute_file_path = try search_dir.root_dir.join(arena, &.{ search_dir.sub_path, entry.path });
                     const relative_to_dir_path = absolute_file_path[search_dir.sub_path.len + 1 ..];
                     // NOTE(jae): 2024-09-22
                     // We set the current working directory to "glob.Dir" and then make arguments be
