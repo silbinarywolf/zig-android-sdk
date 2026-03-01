@@ -1,16 +1,15 @@
 //! DirectoryFileInput adds files within a directory to the dependencies of the given Step.Run command
 //! This is required so that generated directories will work.
 
-const std = @import("std");
 const androidbuild = @import("androidbuild.zig");
 const builtin = @import("builtin");
-const Build = std.Build;
+const Build = @import("std").Build;
 const Step = Build.Step;
 const Run = Build.Step.Run;
 const LazyPath = Build.LazyPath;
-const fs = std.fs;
-const mem = std.mem;
-const assert = std.debug.assert;
+const fs = @import("std").fs;
+const mem = @import("std").mem;
+const debug = @import("std").debug;
 
 step: Step,
 
@@ -20,7 +19,15 @@ run: *Build.Step.Run,
 /// The directory that will contain the files to glob
 dir: LazyPath,
 
-pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
+/// Track the files added to the Run step for --watch
+file_input_range: ?FileInputRange,
+
+const FileInputRange = struct {
+    start_value: []const u8,
+    len: u32,
+};
+
+pub fn create(owner: *Build, run: *Run, dir: LazyPath) void {
     const self = owner.allocator.create(DirectoryFileInput) catch @panic("OOM");
     self.* = .{
         .step = Step.init(.{
@@ -31,6 +38,7 @@ pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
         }),
         .run = run,
         .dir = dir,
+        .file_input_range = null,
     };
     // Run step relies on DirectoryFileInput finishing
     run.step.dependOn(&self.step);
@@ -38,12 +46,35 @@ pub fn create(owner: *std.Build, run: *Run, dir: LazyPath) void {
     dir.addStepDependencies(&self.step);
 }
 
-fn make(step: *Step, _: Build.Step.MakeOptions) !void {
+fn make(step: *Step, options: Build.Step.MakeOptions) !void {
     const b = step.owner;
+    const gpa = options.gpa;
     const arena = b.allocator;
     const self: *DirectoryFileInput = @fieldParentPtr("step", step);
-
     const run = self.run;
+
+    // Add the directory to --watch input so that if any files are updated or changed
+    // this step will re-trigger
+    const need_derived_inputs = try step.addDirectoryWatchInput(self.dir);
+
+    // triggers on --watch if a file is modified.
+    if (self.file_input_range) |file_input_range| {
+        const start_index: usize = blk: {
+            for (run.file_inputs.items, 0..) |lp, file_input_index| {
+                switch (lp) {
+                    .cwd_relative => |cwd_relative| {
+                        if (mem.eql(u8, file_input_range.start_value, cwd_relative)) {
+                            break :blk file_input_index;
+                        }
+                    },
+                    else => continue,
+                }
+            }
+            return error.MissingFileInputWatchArgument;
+        };
+        try run.file_inputs.replaceRange(run.step.owner.allocator, start_index, file_input_range.len, &.{});
+    }
+
     const dir_path = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
         self.dir.getPath3(b, step)
     else
@@ -60,6 +91,8 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     else
         dir.close(b.graph.io);
 
+    var optional_file_input_value: ?[]const u8 = null;
+    var optional_file_input_start_index: ?usize = null;
     var walker = try dir.walk(arena);
     defer walker.deinit();
     while (if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
@@ -67,12 +100,34 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
     else
         try walker.next(b.graph.io)) |entry|
     {
-        if (entry.kind != .file) continue;
-
-        // Add file as dependency to run command
-        run.addFileInput(LazyPath{
-            .cwd_relative = try dir_path.root_dir.join(b.allocator, &.{ dir_path.sub_path, entry.path }),
-        });
+        switch (entry.kind) {
+            .directory => {
+                if (need_derived_inputs) {
+                    const entry_path = try dir_path.join(arena, entry.path);
+                    try step.addDirectoryWatchInputFromPath(entry_path);
+                }
+            },
+            .file => {
+                // Add file as dependency to run command
+                const file_path = try dir_path.root_dir.join(gpa, &.{ dir_path.sub_path, entry.path });
+                if (optional_file_input_value == null) {
+                    // Set index and value of first file
+                    optional_file_input_start_index = run.file_inputs.items.len;
+                    optional_file_input_value = file_path;
+                }
+                run.addFileInput(LazyPath{
+                    .cwd_relative = file_path,
+                });
+            },
+            else => continue,
+        }
+    }
+    if (optional_file_input_value) |file_input_value| {
+        const file_input_start_index = optional_file_input_start_index orelse unreachable;
+        self.file_input_range = .{
+            .start_value = file_input_value,
+            .len = @intCast(run.file_inputs.items.len - file_input_start_index),
+        };
     }
 }
 
