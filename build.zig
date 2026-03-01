@@ -6,7 +6,7 @@ const androidbuild = @import("src/androidbuild/androidbuild.zig");
 
 // TODO: rename tools.zig to Sdk.zig
 pub const Sdk = @import("src/androidbuild/tools.zig");
-pub const Apk = @import("src/androidbuild/apk.zig");
+pub const Apk = @import("src/androidbuild/Apk.zig");
 pub const ApiLevel = androidbuild.ApiLevel;
 pub const standardTargets = androidbuild.standardTargets;
 

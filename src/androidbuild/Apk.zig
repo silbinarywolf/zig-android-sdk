@@ -2,12 +2,12 @@ const std = @import("std");
 const builtin = @import("builtin");
 const androidbuild = @import("androidbuild.zig");
 const Sdk = @import("tools.zig");
-const BuiltinOptionsUpdate = @import("builtin_options_update.zig");
+const BuiltinOptionsUpdate = @import("BuiltinOptionsUpdate.zig");
 const DirectoryFileInput = @import("DirectoryFileInput.zig");
 
 const Ndk = @import("Ndk.zig");
 const BuildTools = @import("BuildTools.zig");
-const D8Glob = @import("d8glob.zig");
+const D8Glob = @import("D8Glob.zig");
 
 const KeyStore = Sdk.KeyStore;
 const ApiLevel = androidbuild.ApiLevel;

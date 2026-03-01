@@ -13,7 +13,7 @@ const AccessError = std.fs.Dir.AccessError;
 const Step = Build.Step;
 const ResolvedTarget = Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
-const Apk = @import("apk.zig");
+const Apk = @import("Apk.zig");
 const Ndk = @import("Ndk.zig");
 const BuildTools = @import("BuildTools.zig");
 
