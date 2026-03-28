@@ -13,7 +13,7 @@ zig build run -Dandroid # Android
 
 ```sh
 zig build -Dtarget=x86_64-linux-android
-adb install ./zig-out/bin/sdl-zig-demo.apk
+adb install -r ./zig-out/bin/sdl-zig-demo.apk
 adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
 ```
 
@@ -21,7 +21,7 @@ adb shell am start -S -W -n com.zig.sdl2/com.zig.sdl2.ZigSDLActivity
 
 ```sh
 zig build -Dandroid=true
-adb install ./zig-out/bin/sdl-zig-demo.apk
+adb install -r ./zig-out/bin/sdl-zig-demo.apk
 ```
 
 ### Uninstall your application

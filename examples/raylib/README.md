@@ -18,7 +18,7 @@ zig build run -Dandroid # Android
 
 ```sh
 zig build -Dtarget=x86_64-linux-android
-adb install ./zig-out/bin/raylib.apk
+adb install -r ./zig-out/bin/raylib.apk
 adb shell am start -S -W -n com.zig.raylib/android.app.NativeActivity
 ```
 
@@ -26,7 +26,7 @@ adb shell am start -S -W -n com.zig.raylib/android.app.NativeActivity
 
 ```sh
 zig build -Dandroid
-adb install ./zig-out/bin/raylib.apk
+adb install -r ./zig-out/bin/raylib.apk
 ```
 
 ### Uninstall your application

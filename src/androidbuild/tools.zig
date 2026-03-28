@@ -199,7 +199,7 @@ pub fn addAdbStart(sdk: *Sdk, package_name_and_java_entry: []const u8) *Step.Run
 }
 
 /// Install an APK onto your Android device or emulator
-/// ie. "adb install ./zig-out/bin/minimal.apk"
+/// ie. "adb install -r ./zig-out/bin/minimal.apk"
 pub fn adbInstall(sdk: *Sdk, apk: LazyPath) void {
     const b = sdk.b;
     const adb_install = sdk.addAdbInstall(apk);
@@ -207,7 +207,7 @@ pub fn adbInstall(sdk: *Sdk, apk: LazyPath) void {
 }
 
 /// Install an APK onto your Android device or emulator
-/// ie. "adb install ./zig-out/bin/minimal.apk"
+/// ie. "adb install -r ./zig-out/bin/minimal.apk"
 pub fn addAdbInstall(sdk: *Sdk, apk: LazyPath) *Step.Run {
     const b = sdk.b;
     if (sdk.platform_tools.adb.len == 0) {
@@ -217,6 +217,7 @@ pub fn addAdbInstall(sdk: *Sdk, apk: LazyPath) *Step.Run {
         sdk.platform_tools.adb,
         "install",
     });
+    adb_install.addArg("-r");
     adb_install.addFileArg(apk);
     return adb_install;
 }
