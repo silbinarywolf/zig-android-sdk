@@ -20,7 +20,7 @@ pub fn wrapLogFn(comptime logFn: fn (
             // NOTE(jae): 2024-09-11
             // Zig has a colon ": " or "): " for scoped but Android logs just do that after being flushed
             // So we don't do that here.
-            const scope_prefix_text = if (scope == .default) "" else "(" ++ @tagName(scope) ++ ")"; // "): ";
+            const scope_prefix_text = if (scope == .default) "" else @tagName(scope) ++ ": ";
             return logFn(message_level, scope_prefix_text, format, args);
         }
     }.standardLogFn;
