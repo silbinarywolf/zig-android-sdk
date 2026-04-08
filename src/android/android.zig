@@ -53,7 +53,7 @@ fn androidLogFn(
         comptime std.mem.indexOfScalar(u8, format, '{') == null)
     {
         // If no formatting, log string directly with Android logging
-        _ = Logger.logString(android_log_level, format);
+        _ = Logger.logString(android_log_level, scope_prefix_text ++ format);
         return;
     }
     var buffer: [8192]u8 = undefined;
