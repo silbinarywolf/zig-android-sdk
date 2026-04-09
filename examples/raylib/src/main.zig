@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
 const android = @import("android");
 const rl = @import("raylib");
 
@@ -42,5 +43,11 @@ comptime {
 }
 
 fn androidMain() callconv(.c) c_int {
-    return std.start.callMain();
+    const result = main();
+    const unwrapped_result = result catch |err| {
+        std.log.err("{t}", .{err});
+        if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace)
+        return 1;
+    };
+    return 0;
 }
