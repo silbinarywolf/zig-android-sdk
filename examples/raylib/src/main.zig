@@ -43,10 +43,9 @@ comptime {
 }
 
 fn androidMain() callconv(.c) c_int {
-    const result = main();
-    const unwrapped_result = result catch |err| {
+    main() catch |err| {
         std.log.err("{t}", .{err});
-        if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace)
+        if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
         return 1;
     };
     return 0;
