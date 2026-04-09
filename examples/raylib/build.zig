@@ -55,7 +55,14 @@ pub fn build(b: *std.Build) void {
                 .linkage = LinkMode.dynamic,
             });
 
-        app.linkLibrary(raylib_dep.artifact("raylib"));
+        const raylib_lib = raylib_dep.artifact("raylib");
+        // NOTE(jae): 2026-04-09
+        // Enable PIC to resolve compilation issues
+        //
+        // ld.lld: relocation R_AARCH64_ADD_ABS_LO12_NC cannot be used against symbol 'CORE'; recompile with -fPIC
+        //         relocation R_X86_64_64 cannot be used against local symbol; recompile with -fPIC
+        raylib_lib.root_module.pic = true;
+        app.linkLibrary(raylib_lib);
         app.addImport("raylib", raylib_dep.module("raylib"));
 
         if (android_apk) |apk| {
