@@ -56,14 +56,13 @@ pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]co
     };
 }
 
-/// Will return a slice of Android targets
-/// - If -Dandroid=true, return all Android targets (x86, x86_64, aarch64, etc)
-/// - If -Dtarget=aarch64-linux-android, return a slice with the one specified Android target
-///
-/// If none of the above, then return a zero length slice.
-pub fn standardTargets(b: *std.Build, target: ResolvedTarget) []ResolvedTarget {
-    const all_targets = b.option(bool, "android", "if true, build for all Android targets (x86, x86_64, aarch64, etc)") orelse false;
-    if (all_targets) {
+/// Return a slice of Android targets
+/// - If `all_targets` is true, returns all Android targets (x86, x86_64, aarch64, etc)
+/// - If `all_targets` is null and `-Dandroid=true`, returns all Android targets
+/// - If `target` uses the Android ABI, returns a slice with the specified target
+/// - Otherwise, returns a zero length slice
+pub fn standardTargets(b: *std.Build, target: ResolvedTarget, all_targets: ?bool) []ResolvedTarget {
+    if (all_targets orelse b.option(bool, "android", "if true, build for all Android targets (x86, x86_64, aarch64, etc)") orelse false) {
         return getAllAndroidTargets(b);
     }
     if (!target.result.abi.isAndroid()) {

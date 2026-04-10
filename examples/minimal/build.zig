@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
     const exe_name: []const u8 = "minimal";
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const android_targets = android.standardTargets(b, root_target);
+    const android_targets = android.standardTargets(b, root_target, null);
 
     var root_target_single = [_]std.Build.ResolvedTarget{root_target};
     const targets: []std.Build.ResolvedTarget = if (android_targets.len == 0)

@@ -5,7 +5,7 @@ const android = @import("android");
 pub fn build(b: *std.Build) void {
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const android_targets = android.standardTargets(b, root_target);
+    const android_targets = android.standardTargets(b, root_target, null);
 
     const crash_on_exception = b.option(bool, "crash-on-exception", "if true then we'll use the activity from androidCrashTest folder") orelse false;
 
