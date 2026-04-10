@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const android = @import("android");
 
 pub fn build(b: *std.Build) void {
+    const exe_name: []const u8 = "sdl-zig-demo";
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const android_targets = android.standardTargets(b, root_target);
@@ -20,6 +21,7 @@ pub fn build(b: *std.Build) void {
 
         const android_sdk = android.Sdk.create(b, .{});
         const apk = android_sdk.createApk(.{
+            .name = exe_name,
             .api_level = .android15,
             .build_tools_version = "36.1.0",
             .ndk_version = "29.0.14206865",
@@ -68,7 +70,6 @@ pub fn build(b: *std.Build) void {
     };
 
     for (targets) |target| {
-        const exe_name: []const u8 = "sdl-zig-demo";
         const app_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -115,7 +116,7 @@ pub fn build(b: *std.Build) void {
             app_module.addImport("android", android_dep.module("android"));
 
             const exe_lib = b.addLibrary(.{
-                .name = exe_name,
+                .name = "main",
                 .root_module = app_module,
                 .linkage = .dynamic,
             });

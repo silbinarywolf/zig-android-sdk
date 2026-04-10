@@ -2,9 +2,8 @@ const std = @import("std");
 const android = @import("android");
 const LinkMode = std.builtin.LinkMode;
 
-const exe_name = "raylib";
-
 pub fn build(b: *std.Build) void {
+    const exe_name = "raylib";
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const android_targets = android.standardTargets(b, root_target);
@@ -20,6 +19,7 @@ pub fn build(b: *std.Build) void {
 
         const android_sdk = android.Sdk.create(b, .{});
         const apk = android_sdk.createApk(.{
+            .name = exe_name,
             .api_level = .android15,
             .build_tools_version = "35.0.1",
             .ndk_version = "29.0.13113456",
@@ -72,7 +72,7 @@ pub fn build(b: *std.Build) void {
 
             apk.addArtifact(b.addLibrary(.{
                 .linkage = .dynamic,
-                .name = exe_name,
+                .name = "main",
                 .root_module = app,
             }));
         } else {

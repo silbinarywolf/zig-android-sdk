@@ -35,6 +35,8 @@ pub const Resource = union(enum) {
 };
 
 b: *std.Build,
+/// APK file output name, ie. "{name}.apk"
+name: []const u8,
 sdk: *Sdk,
 /// Path to Native Development Kit, this includes various C-code headers, libraries, and more.
 /// ie. $ANDROID_HOME/ndk/29.0.13113456
@@ -53,6 +55,8 @@ resources: std.ArrayListUnmanaged(Resource),
 assets: std.ArrayListUnmanaged(Resource),
 
 pub const Options = struct {
+    /// APK file output name, ie. "{name}.apk"
+    name: []const u8,
     /// ie. "35.0.0"
     build_tools_version: []const u8,
     /// ie. "27.0.12077973"
@@ -87,6 +91,7 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
     const apk: *Apk = b.allocator.create(Apk) catch @panic("OOM");
     apk.* = .{
         .b = b,
+        .name = options.name,
         .sdk = sdk,
         .ndk = ndk,
         .build_tools = build_tools,
@@ -477,7 +482,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
             .x86 => "x86",
             else => @panic(b.fmt("unsupported or unhandled arch: {s}", .{@tagName(target.result.cpu.arch)})),
         };
-        _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/libmain.so", .{so_dir}));
+        _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
 
         // Add module
         // - If a module has no `root_source_file` (e.g you're only compiling C files using `addCSourceFiles`)
@@ -719,8 +724,6 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     // lint.setEnvironmentVariable("JAVA_HOME", apk.tools.jdk_path);
     // lint.addFileArg(android_manifest_file);
 
-    const apk_name = apk.artifacts.items[0].name;
-
     // Align contents of .apk (zip)
     const aligned_apk_file: LazyPath = blk: {
         var zipalign = b.addSystemCommand(&[_][]const u8{
@@ -748,7 +751,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         zipalign.addFileArg(zip_file);
         zipalign.step.dependOn(update_zip);
 
-        const apk_file = zipalign.addOutputFileArg(b.fmt("aligned-{s}.apk", .{apk_name}));
+        const apk_file = zipalign.addOutputFileArg(b.fmt("aligned-{s}.apk", .{apk.name}));
         break :blk apk_file;
     };
 
@@ -769,7 +772,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         break :blk signed_output_apk_file;
     };
 
-    const install_apk = b.addInstallBinFile(signed_apk_file, b.fmt("{s}.apk", .{apk_name}));
+    const install_apk = b.addInstallBinFile(signed_apk_file, b.fmt("{s}.apk", .{apk.name}));
     return install_apk;
 }
 

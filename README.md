@@ -20,6 +20,7 @@ const android = @import("android");
 pub fn build(b: *std.Build) !void {
     const android_sdk = android.Sdk.create(b, .{});
     const apk = android_sdk.createApk(.{
+        .name = "example",
         .api_level = .android15,
         .build_tools_version = "35.0.1",
         .ndk_version = "29.0.13113456",
@@ -28,12 +29,15 @@ pub fn build(b: *std.Build) !void {
     apk.addResourceDirectory(b.path("android/res"));
     apk.addJavaSourceFile(.{ .file = b.path("android/src/NativeInvocationHandler.java") });
     for (android.standardTargets(b, b.standardTargetOptions(.{}))) |target| {
-        apk.addArtifact(b.addSharedLibrary(.{
-            .name = exe_name,
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }))
+        apk.addArtifact(b.addLibrary(.{
+            .name = "main",
+            .linkage = .dynamic,
+            .root_module = b.createModule(
+                .root_source_file = b.path("src/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            ),
+        }));
     }
 }
 ```
