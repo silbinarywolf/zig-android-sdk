@@ -1,15 +1,16 @@
 const std = @import("std");
 const builtin = @import("builtin");
+
 const androidbuild = @import("src/androidbuild/androidbuild.zig");
+pub const ApiLevel = androidbuild.ApiLevel;
+pub const standardTargets = androidbuild.standardTargets;
+pub const resolveTargets = androidbuild.resolveTargets;
+pub const Apk = @import("src/androidbuild/Apk.zig");
+pub const Sdk = @import("src/androidbuild/tools.zig");
 
 // Expose Android build functionality for use in your build.zig
 
 // TODO: rename tools.zig to Sdk.zig
-pub const Sdk = @import("src/androidbuild/tools.zig");
-pub const Apk = @import("src/androidbuild/Apk.zig");
-pub const ApiLevel = androidbuild.ApiLevel;
-pub const standardTargets = androidbuild.standardTargets;
-
 // Deprecated exposed fields
 
 /// Deprecated: Use ApiLevel

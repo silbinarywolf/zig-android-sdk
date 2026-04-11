@@ -1,9 +1,8 @@
 const std = @import("std");
-const builtin = @import("builtin");
-
 const Target = std.Target;
 const ResolvedTarget = std.Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
+const builtin = @import("builtin");
 
 const log = std.log.scoped(.@"zig-android-sdk");
 
@@ -62,10 +61,36 @@ pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]co
 ///
 /// If none of the above, then return a zero length slice.
 pub fn standardTargets(b: *std.Build, target: ResolvedTarget) []ResolvedTarget {
+    // NOTE(jae): 2026-04-11
+    // Seperated logic into "resolveTargets" so that consumers of this library can create this option themselves and use "b.lazyImport"
+    // See: https://github.com/silbinarywolf/zig-android-sdk/pull/82
     const all_targets = b.option(bool, "android", "if true, build for all Android targets (x86, x86_64, aarch64, etc)") orelse false;
-    if (all_targets) {
+    return resolveTargets(b, .{
+        .default_target = target,
+        .all_targets = all_targets,
+    });
+}
+
+pub const ResolveTargetOptions = struct {
+    /// The target retrieved from b.standardTargetOptions
+    default_target: ResolvedTarget,
+    /// If true, then retrieve all Android targets rather than using the default target
+    all_targets: bool,
+
+    /// Shorthand to query all Android targets
+    pub const all: ResolveTargetOptions = .{
+        .default_target = undefined,
+        .all_targets = true,
+    };
+};
+
+/// Will return a slice of Android targets depending on the options given.
+/// Avoids setting up options
+pub fn resolveTargets(b: *std.Build, options: ResolveTargetOptions) []ResolvedTarget {
+    if (options.all_targets) {
         return getAllAndroidTargets(b);
     }
+    const target = options.default_target;
     if (!target.result.abi.isAndroid()) {
         return &[0]ResolvedTarget{};
     }
