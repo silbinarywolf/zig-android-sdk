@@ -1,25 +1,23 @@
 const std = @import("std");
-const builtin = @import("builtin");
-const androidbuild = @import("androidbuild.zig");
-const Sdk = @import("tools.zig");
-const BuiltinOptionsUpdate = @import("BuiltinOptionsUpdate.zig");
-const DirectoryFileInput = @import("DirectoryFileInput.zig");
-
-const Ndk = @import("Ndk.zig");
-const BuildTools = @import("BuildTools.zig");
-const D8Glob = @import("D8Glob.zig");
-
-const KeyStore = Sdk.KeyStore;
-const ApiLevel = androidbuild.ApiLevel;
-const getAndroidTriple = androidbuild.getAndroidTriple;
-const runNameContext = androidbuild.runNameContext;
-const printErrorsAndExit = androidbuild.printErrorsAndExit;
-
 const Allocator = std.mem.Allocator;
 const Target = std.Target;
 const Step = std.Build.Step;
 const ResolvedTarget = std.Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
+const builtin = @import("builtin");
+
+const androidbuild = @import("androidbuild.zig");
+const ApiLevel = androidbuild.ApiLevel;
+const getAndroidTriple = androidbuild.getAndroidTriple;
+const runNameContext = androidbuild.runNameContext;
+const printErrorsAndExit = androidbuild.printErrorsAndExit;
+const BuildTools = @import("BuildTools.zig");
+const BuiltinOptionsUpdate = @import("BuiltinOptionsUpdate.zig");
+const D8Glob = @import("D8Glob.zig");
+const DirectoryFileInput = @import("DirectoryFileInput.zig");
+const Ndk = @import("Ndk.zig");
+const Sdk = @import("tools.zig");
+const KeyStore = Sdk.KeyStore;
 
 pub const Resource = union(enum) {
     // file: File,
