@@ -8,9 +8,6 @@ pub const resolveTargets = androidbuild.resolveTargets;
 pub const Apk = @import("src/androidbuild/Apk.zig");
 pub const Sdk = @import("src/androidbuild/tools.zig");
 
-// Expose Android build functionality for use in your build.zig
-
-// TODO: rename tools.zig to Sdk.zig
 // Deprecated exposed fields
 
 /// Deprecated: Use ApiLevel
