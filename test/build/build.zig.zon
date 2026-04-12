@@ -1,0 +1,23 @@
+.{
+    .name = .android_build_test,
+    .version = "0.0.0",
+    .dependencies = .{
+        .android = .{
+            .path = "../..",
+        },
+        .lazy_android = .{
+            .path = "../..",
+            .lazy = true,
+        },
+        .vulkan_validation = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.341.0/android-binaries-1.4.341.0.zip",
+            .hash = "N-V-__8AABTXlAV0z_BGl5-lZeOEm_d2gHEhExT2qjxMqQ72",
+            .lazy = true,
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+    .fingerprint = 0xb15d5a3541f113ad,
+}

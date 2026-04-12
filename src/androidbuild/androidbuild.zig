@@ -55,6 +55,48 @@ pub fn getAndroidTriple(target: ResolvedTarget) error{InvalidAndroidTarget}![]co
     };
 }
 
+/// List of supported Android targets, this is used as a shorthand for API functions like "apk.addLibraryFile".
+pub const AndroidTarget = enum {
+    arm64_v8a,
+    armeabi_v7a,
+    x86_64,
+    x86,
+
+    pub fn target(at: AndroidTarget, b: *std.Build) ResolvedTarget {
+        const android_target_query: AndroidTargetQuery = switch (at) {
+            .arm64_v8a => .{
+                // aarch64-linux-android
+                .cpu_arch = .aarch64,
+                .cpu_features_add = Target.aarch64.featureSet(&.{.v8a}),
+            },
+            .armeabi_v7a => .{
+                // arm-linux-androideabi
+                .cpu_arch = .arm,
+                .cpu_features_add = Target.arm.featureSet(&.{.v7a}),
+            },
+            .x86_64 => .{
+                // x86_64-linux-android
+                .cpu_arch = .x86_64,
+            },
+            .x86 => .{
+                // i686-linux-android
+                .cpu_arch = .x86,
+            },
+        };
+        return b.resolveTargetQuery(android_target_query.queryTarget());
+    }
+
+    /// The "lib/{AndroidTarget}" directory name as it appears in an APK
+    pub fn lib(at: AndroidTarget) []const u8 {
+        return switch (at) {
+            .arm64_v8a => "arm64-v8a",
+            .armeabi_v7a => "armeabi-v7a",
+            .x86_64 => "x86_64",
+            .x86 => "x86",
+        };
+    }
+};
+
 /// Will return a slice of Android targets
 /// - If -Dandroid=true, return all Android targets (x86, x86_64, aarch64, etc)
 /// - If -Dtarget=aarch64-linux-android, return a slice with the one specified Android target
