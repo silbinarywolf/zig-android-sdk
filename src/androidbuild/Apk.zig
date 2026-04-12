@@ -467,8 +467,15 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     // ie. https://developer.android.com/ndk/guides/graphics/validation-layer
     for (apk.precompiled_library_files.items) |precompiled_library| {
         const so_dir = androidbuild.getTargetLibDir(b, precompiled_library.target);
-        const lib_file = precompiled_library.path.basename(b, null);
-        _ = apk_files.addCopyFile(precompiled_library.path, b.fmt("lib/{s}/{s}", .{ so_dir, lib_file }));
+        // NOTE(jae): 2026-04-12
+        // Can likely just change to "precompiled_library.path.basename()" in the future if this breaks
+        const precompiled_lib_basename = std.fs.path.basename(switch (precompiled_library.path) {
+            .src_path => |sp| sp.sub_path,
+            .cwd_relative => |sub_path| sub_path,
+            .generated => @panic("invalid precompiled library, cannot be generated"),
+            .dependency => |dep| dep.sub_path,
+        });
+        _ = apk_files.addCopyFile(precompiled_library.path, b.fmt("lib/{s}/{s}", .{ so_dir, precompiled_lib_basename }));
     }
 
     // These files belong in root and *must not* be compressed
