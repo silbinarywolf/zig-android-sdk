@@ -456,31 +456,9 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     // - i686-linux-android
     // - x86_64-linux-android
     for (apk.artifacts.items, 0..) |artifact, artifact_index| {
-        const target: ResolvedTarget = artifact.root_module.resolved_target orelse {
+        if (artifact.root_module.resolved_target == null) {
             @panic(b.fmt("artifact[{d}] has no 'target' set", .{artifact_index}));
-        };
-
-        // NOTE(jae): 2026-02-01
-        // If not explicitly set in users build, default to using LLVM and LLD for Android builds
-        // as that's the same toolchain that the Android SDK uses.
-        //
-        // This also can resolve issues with Zigs linker not yet supporting certain compression schemes/etc
-        if (artifact.use_llvm == null) {
-            artifact.use_llvm = true;
         }
-        if (artifact.use_lld == null) {
-            artifact.use_lld = true;
-        }
-
-        // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
-        const so_dir: []const u8 = switch (target.result.cpu.arch) {
-            .aarch64 => "arm64-v8a",
-            .arm => "armeabi-v7a",
-            .x86_64 => "x86_64",
-            .x86 => "x86",
-            else => @panic(b.fmt("unsupported or unhandled arch: {s}", .{@tagName(target.result.cpu.arch)})),
-        };
-        _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
 
         // Add module
         // - If a module has no `root_source_file` (e.g you're only compiling C files using `addCSourceFiles`)
@@ -523,25 +501,21 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         // update linked libraries that use C or C++ to:
         // - use Android LibC file
         // - add Android NDK library paths. (libandroid, liblog, etc)
-        apk.updateLinkObjects(artifact, so_dir, apk_files);
+        apk.updateLinkObjects(artifact, apk_files);
 
         // update artifact to:
         // - Be configured to work correctly on Android
         // - To know where C header /lib files are via setLibCFile and linkLibC
         // - Provide path to additional libraries to link to
         {
-            if (artifact.linkage) |linkage| {
-                if (linkage == .dynamic) {
-                    updateSharedLibraryOptions(artifact);
-                }
+            if (artifact.root_module.link_libc == null) {
+                artifact.root_module.link_libc = true;
             }
-            apk.setLibCFile(artifact);
-            apk.addLibraryPaths(artifact.root_module);
-            artifact.root_module.link_libc = true;
+            apk.updateArtifact(artifact, apk_files);
 
             // Apply workaround for Zig 0.14.0 stable
             //
-            // This *must* occur after "apk.updateLinkObjects" for the root package otherwise
+            // This *must* occur after apk.updateArtifact (apk.updateLinkObjects) for the root package otherwise
             // you may get an error like: "unable to find dynamic system library 'c++abi_zig_workaround'"
             apk.applyLibLinkCppWorkaroundIssue19(artifact);
         }
@@ -787,36 +761,58 @@ fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
     compile.setLibCFile(android_libc_path);
 }
 
-fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8, raw_top_level_apk_files: *Step.WriteFile) void {
+fn updateArtifact(apk: *Apk, artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
     const b = apk.b;
+
+    // If you have a library that is being built as an *.so then install it
+    // alongside your library.
+    //
+    // This was initially added to support building SDL2 with Zig.
+    if (artifact.linkage) |linkage| {
+        if (linkage == .dynamic) {
+            updateSharedLibraryOptions(artifact);
+
+            // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
+            const target = artifact.root_module.resolved_target orelse unreachable;
+            const so_dir = androidbuild.getTargetLibDir(b, target);
+            _ = raw_top_level_apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
+        }
+    }
+
+    // NOTE(jae): 2026-02-01
+    // If not explicitly set in users build, default to using LLVM and LLD for Android builds
+    // as that's the same toolchain that the Android SDK uses.
+    //
+    // This also can resolve issues with Zigs linker not yet supporting certain compression schemes/etc
+    if (artifact.use_lld == null) {
+        artifact.use_lld = true;
+    }
+    if (artifact.use_llvm == null) {
+        artifact.use_llvm = true;
+    }
+
+    // If library is built using C or C++ then setLibCFile
+    if (artifact.root_module.link_libc == true or
+        artifact.root_module.link_libcpp == true)
+    {
+        apk.setLibCFile(artifact);
+    }
+
+    // Add library paths to find "android", "log", etc
+    apk.addLibraryPaths(artifact.root_module);
+}
+
+fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
     for (root_artifact.root_module.link_objects.items) |link_object| {
         switch (link_object) {
             .other_step => |artifact| {
                 switch (artifact.kind) {
                     .lib => {
-                        // If you have a library that is being built as an *.so then install it
-                        // alongside your library.
-                        //
-                        // This was initially added to support building SDL2 with Zig.
-                        if (artifact.linkage) |linkage| {
-                            if (linkage == .dynamic) {
-                                updateSharedLibraryOptions(artifact);
-                                _ = raw_top_level_apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
-                            }
-                        }
-
-                        // If library is built using C or C++ then setLibCFile
-                        if (artifact.root_module.link_libc == true or
-                            artifact.root_module.link_libcpp == true)
-                        {
-                            apk.setLibCFile(artifact);
-                        }
-
-                        // Add library paths to find "android", "log", etc
-                        apk.addLibraryPaths(artifact.root_module);
+                        // Update updateSharedLibraryOptions, libCFile, addLibraryPaths
+                        apk.updateArtifact(artifact, raw_top_level_apk_files);
 
                         // Update libraries linked to this library
-                        apk.updateLinkObjects(artifact, so_dir, raw_top_level_apk_files);
+                        apk.updateLinkObjects(artifact, raw_top_level_apk_files);
 
                         // Apply workaround for Zig 0.14.0 and Zig 0.15.X
                         apk.applyLibLinkCppWorkaroundIssue19(artifact);

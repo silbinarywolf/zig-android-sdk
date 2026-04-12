@@ -103,9 +103,12 @@ jobs:
         zig build -Dandroid=true -Dcrash-on-exception --verbose
       working-directory: examples/sdl2
     
-    - name: Build Raylib Example (Zig Stable)
-      run: zig build -Dandroid=true --verbose
-      working-directory: examples/raylib
+    # NOTE(jae): 2026-04-09
+    # Raylib example only runs on 0.16.X due to downstream dependencies
+    #
+    # - name: Build Raylib Example (Zig Stable)
+    #  run: zig build -Dandroid=true --verbose
+    #  working-directory: examples/raylib
 
     # TODO(jae): 2025-03-30
     # Need to figure out how to get 'adb shell monkey' to return an error code or be able to return an error code
@@ -183,12 +186,11 @@ jobs:
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
-    # note(jae): 2026-01-10
-    # Downstream packages for Raylib won't work with Zig 0.15.2 *and* Zig 0.16.X
-    #
-    # - name: Build Raylib Example (Zig Nightly)
-    #  run: zig build -Dandroid=true --verbose
-    #  working-directory: examples/raylib
+    # note(jae): 2026-04-09
+    # Downstream packages for Raylib only support 0.16.X-dev right now.
+    - name: Build Raylib Example (Zig Nightly)
+      run: zig build -Dandroid=true --verbose
+      working-directory: examples/raylib
   build-previous-stable:
     name: Build Zig Previous
     needs: [setup]
