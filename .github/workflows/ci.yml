@@ -93,6 +93,10 @@ jobs:
       with:
         version: ${{ needs.setup.outputs.zig-stable-version }}
 
+    - name: Build Test (Zig Stable)
+      run: zig build -Dandroid=true --verbose
+      working-directory: test/build
+
     - name: Build Minimal Example (Zig Stable)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
@@ -178,6 +182,10 @@ jobs:
       with:
         version: "master"
 
+    - name: Build Test (Zig Nightly)
+      run: zig build -Dandroid=true --verbose
+      working-directory: test/build
+
     - name: Build Minimal Example (Zig Nightly)
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
@@ -223,6 +231,10 @@ jobs:
       uses: mlugg/setup-zig@v2
       with:
         version: ${{ needs.setup.outputs.zig-previous-stable-version }}
+
+    - name: Build Test (Zig Nightly)
+      run: zig build -Dandroid=true --verbose
+      working-directory: test/build
 
     - name: Build Minimal Example 
       run: zig build -Dandroid=true --verbose

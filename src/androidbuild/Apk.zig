@@ -4,6 +4,7 @@ const Target = std.Target;
 const Step = std.Build.Step;
 const ResolvedTarget = std.Build.ResolvedTarget;
 const LazyPath = std.Build.LazyPath;
+const ArrayList = std.ArrayListUnmanaged;
 const builtin = @import("builtin");
 
 const androidbuild = @import("androidbuild.zig");
@@ -47,10 +48,13 @@ build_tools: BuildTools,
 api_level: ApiLevel,
 key_store: ?KeyStore,
 android_manifest: ?LazyPath,
-artifacts: std.ArrayListUnmanaged(*Step.Compile),
-java_files: std.ArrayListUnmanaged(LazyPath),
-resources: std.ArrayListUnmanaged(Resource),
-assets: std.ArrayListUnmanaged(Resource),
+artifacts: ArrayList(*Step.Compile),
+/// Precompiled library files can be added to the APK to support features like Vulkan validation layers
+/// ie. https://developer.android.com/ndk/guides/graphics/validation-layer
+precompiled_library_files: ArrayList(PrecompiledLibraryFile),
+java_files: ArrayList(LazyPath),
+resources: ArrayList(Resource),
+assets: ArrayList(Resource),
 
 pub const Options = struct {
     /// APK file output name, ie. "{name}.apk"
@@ -96,6 +100,7 @@ pub fn create(sdk: *Sdk, options: Options) *Apk {
         .api_level = options.api_level,
         .key_store = null,
         .android_manifest = null,
+        .precompiled_library_files = .empty,
         .artifacts = .empty,
         .java_files = .empty,
         .resources = .empty,
@@ -174,6 +179,18 @@ pub fn addJavaSourceFiles(apk: *Apk, options: AddJavaSourceFilesOptions) void {
 /// - apk.setKeyStore(android_sdk.createKeyStore(.example);
 pub fn setKeyStore(apk: *Apk, key_store: KeyStore) void {
     apk.key_store = key_store;
+}
+
+/// Add precompiled library files
+///
+/// This is useful for when you want to consume vendors compiled library files such as the Vulkan Validation layers
+/// ie. https://developer.android.com/ndk/guides/graphics/validation-layer
+pub fn addLibraryFile(apk: *Apk, android_target: androidbuild.AndroidTarget, path: LazyPath) void {
+    const b = apk.b;
+    apk.precompiled_library_files.append(b.allocator, .{
+        .target = android_target.target(b),
+        .path = path,
+    }) catch @panic("OOM");
 }
 
 fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
@@ -445,6 +462,14 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     // - lib/x86/libmain.so
     // - classes.dex
     const apk_files = b.addWriteFiles();
+
+    // Add support for adding compiled library files (Vulkan Validation layers)
+    // ie. https://developer.android.com/ndk/guides/graphics/validation-layer
+    for (apk.precompiled_library_files.items) |precompiled_library| {
+        const so_dir = androidbuild.getTargetLibDir(b, precompiled_library.target);
+        const lib_file = precompiled_library.path.basename(b, null);
+        _ = apk_files.addCopyFile(precompiled_library.path, b.fmt("lib/{s}/{s}", .{ so_dir, lib_file }));
+    }
 
     // These files belong in root and *must not* be compressed
     // - resources.arsc
@@ -967,5 +992,12 @@ fn updatePathWithJdk(apk: *Apk, run: *std.Build.Step.Run) Allocator.Error!void {
         run.addPathDir(b.pathJoin(&.{ apk.sdk.jdk_path, "bin" }));
     }
 }
+
+const PrecompiledLibraryFile = struct {
+    /// The target it belongs to
+    target: ResolvedTarget,
+    /// A precompiled *.so file like "libVkLayer_khronos_validation.so"
+    path: LazyPath,
+};
 
 const Apk = @This();
