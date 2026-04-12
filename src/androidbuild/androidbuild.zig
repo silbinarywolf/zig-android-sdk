@@ -109,6 +109,29 @@ pub fn resolveTargets(b: *std.Build, options: ResolveTargetOptions) []ResolvedTa
     @panic(b.fmt("unsupported Android target given: {s}", .{linuxTriple}));
 }
 
+/// Get the library directory name of a given build target within an APK.
+/// - armeabi-v7a
+/// - arm64-v8a
+/// - x86_64
+/// - x86
+///
+/// Example of structure within an APK
+/// - lib/armeabi-v7a/libfoo.so
+/// - lib/arm64-v8a/libfoo.so
+/// - lib/x86/libfoo.so
+/// - lib/x86_64/libfoo.so
+///
+/// See documentation here: https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
+pub fn getTargetLibDir(b: std.Build, target: ResolvedTarget) []const u8 {
+    return switch (target.result.cpu.arch) {
+        .aarch64 => "arm64-v8a",
+        .arm => "armeabi-v7a",
+        .x86_64 => "x86_64",
+        .x86 => "x86",
+        else => @panic(b.fmt("cannot determine APK library directory, unsupported or unhandled arch: {s}", .{@tagName(target.result.cpu.arch)})),
+    };
+}
+
 fn getAllAndroidTargets(b: *std.Build) []ResolvedTarget {
     const resolved_targets = b.allocator.alloc(ResolvedTarget, supported_android_targets.len) catch @panic("OOM");
     for (supported_android_targets, 0..) |android_target, i| {

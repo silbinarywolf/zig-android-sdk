@@ -456,19 +456,9 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     // - i686-linux-android
     // - x86_64-linux-android
     for (apk.artifacts.items, 0..) |artifact, artifact_index| {
-        const target: ResolvedTarget = artifact.root_module.resolved_target orelse {
+        if (artifact.root_module.resolved_target == null) {
             @panic(b.fmt("artifact[{d}] has no 'target' set", .{artifact_index}));
-        };
-
-        // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
-        const so_dir: []const u8 = switch (target.result.cpu.arch) {
-            .aarch64 => "arm64-v8a",
-            .arm => "armeabi-v7a",
-            .x86_64 => "x86_64",
-            .x86 => "x86",
-            else => @panic(b.fmt("unsupported or unhandled arch: {s}", .{@tagName(target.result.cpu.arch)})),
-        };
-        _ = apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
+        }
 
         // Add module
         // - If a module has no `root_source_file` (e.g you're only compiling C files using `addCSourceFiles`)
@@ -511,7 +501,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         // update linked libraries that use C or C++ to:
         // - use Android LibC file
         // - add Android NDK library paths. (libandroid, liblog, etc)
-        apk.updateLinkObjects(artifact, so_dir, apk_files);
+        apk.updateLinkObjects(artifact, apk_files);
 
         // update artifact to:
         // - Be configured to work correctly on Android
@@ -521,7 +511,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
             if (artifact.root_module.link_libc == null) {
                 artifact.root_module.link_libc = true;
             }
-            apk.updateArtifact(artifact, so_dir, apk_files);
+            apk.updateArtifact(artifact, apk_files);
 
             // Apply workaround for Zig 0.14.0 stable
             //
@@ -771,7 +761,9 @@ fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
     compile.setLibCFile(android_libc_path);
 }
 
-fn updateArtifact(apk: *Apk, artifact: *Step.Compile, so_dir: []const u8, raw_top_level_apk_files: *Step.WriteFile) void {
+fn updateArtifact(apk: *Apk, artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
+    const b = apk.b;
+
     // If you have a library that is being built as an *.so then install it
     // alongside your library.
     //
@@ -779,7 +771,11 @@ fn updateArtifact(apk: *Apk, artifact: *Step.Compile, so_dir: []const u8, raw_to
     if (artifact.linkage) |linkage| {
         if (linkage == .dynamic) {
             updateSharedLibraryOptions(artifact);
-            _ = raw_top_level_apk_files.addCopyFile(artifact.getEmittedBin(), apk.b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
+
+            // https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
+            const target = artifact.root_module.resolved_target orelse unreachable;
+            const so_dir = androidbuild.getTargetLibDir(b, target);
+            _ = raw_top_level_apk_files.addCopyFile(artifact.getEmittedBin(), b.fmt("lib/{s}/lib{s}.so", .{ so_dir, artifact.name }));
         }
     }
 
@@ -795,12 +791,6 @@ fn updateArtifact(apk: *Apk, artifact: *Step.Compile, so_dir: []const u8, raw_to
         artifact.use_llvm = true;
     }
 
-    // NOTE(jae): 2026-04-12
-    // Android should default to using fPIC to avoid compilation issues.
-    // if (artifact.root_module.pic == null) {
-    //     artifact.root_module.pic = true;
-    // }
-
     // If library is built using C or C++ then setLibCFile
     if (artifact.root_module.link_libc == true or
         artifact.root_module.link_libcpp == true)
@@ -812,17 +802,17 @@ fn updateArtifact(apk: *Apk, artifact: *Step.Compile, so_dir: []const u8, raw_to
     apk.addLibraryPaths(artifact.root_module);
 }
 
-fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, so_dir: []const u8, raw_top_level_apk_files: *Step.WriteFile) void {
+fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
     for (root_artifact.root_module.link_objects.items) |link_object| {
         switch (link_object) {
             .other_step => |artifact| {
                 switch (artifact.kind) {
                     .lib => {
                         // Update updateSharedLibraryOptions, libCFile, addLibraryPaths
-                        apk.updateArtifact(artifact, so_dir, raw_top_level_apk_files);
+                        apk.updateArtifact(artifact, raw_top_level_apk_files);
 
                         // Update libraries linked to this library
-                        apk.updateLinkObjects(artifact, so_dir, raw_top_level_apk_files);
+                        apk.updateLinkObjects(artifact, raw_top_level_apk_files);
 
                         // Apply workaround for Zig 0.14.0 and Zig 0.15.X
                         apk.applyLibLinkCppWorkaroundIssue19(artifact);
