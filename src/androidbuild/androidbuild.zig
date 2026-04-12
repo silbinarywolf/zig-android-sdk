@@ -122,7 +122,7 @@ pub fn resolveTargets(b: *std.Build, options: ResolveTargetOptions) []ResolvedTa
 /// - lib/x86_64/libfoo.so
 ///
 /// See documentation here: https://developer.android.com/ndk/guides/abis#native-code-in-app-packages
-pub fn getTargetLibDir(b: std.Build, target: ResolvedTarget) []const u8 {
+pub fn getTargetLibDir(b: *std.Build, target: ResolvedTarget) []const u8 {
     return switch (target.result.cpu.arch) {
         .aarch64 => "arm64-v8a",
         .arm => "armeabi-v7a",
