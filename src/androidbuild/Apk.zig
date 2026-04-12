@@ -797,9 +797,9 @@ fn updateArtifact(apk: *Apk, artifact: *Step.Compile, so_dir: []const u8, raw_to
 
     // NOTE(jae): 2026-04-12
     // Android should default to using fPIC to avoid compilation issues.
-    if (artifact.root_module.pic == null) {
-        artifact.root_module.pic = true;
-    }
+    // if (artifact.root_module.pic == null) {
+    //     artifact.root_module.pic = true;
+    // }
 
     // If library is built using C or C++ then setLibCFile
     if (artifact.root_module.link_libc == true or

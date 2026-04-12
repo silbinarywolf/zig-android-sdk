@@ -63,12 +63,11 @@ pub fn build(b: *std.Build) void {
 
         const raylib_lib = raylib_dep.artifact("raylib");
         // NOTE(jae): 2026-04-09
-        // Tried to enable PIC to resolve the problems but while it solved compilation issues,
-        // Raylib would fail to run on an Android VM
+        // Enable PIC=true for Raylib, otherwise it will not compile.
         //
         // ld.lld: relocation R_AARCH64_ADD_ABS_LO12_NC cannot be used against symbol 'CORE'; recompile with -fPIC
         //         relocation R_X86_64_64 cannot be used against local symbol; recompile with -fPIC
-        // raylib_lib.root_module.pic = true;
+        raylib_lib.root_module.pic = true;
         app.linkLibrary(raylib_lib);
         app.addImport("raylib", raylib_dep.module("raylib"));
 

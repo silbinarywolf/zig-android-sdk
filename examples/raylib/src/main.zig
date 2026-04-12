@@ -44,7 +44,20 @@ comptime {
         // Then Raylib makes the "android_main" entrypoint call the exported "main" C-function
         // https://github.com/raysan5/raylib/blob/f89d38b086c1d0a0c7e38c9c648aa91c05646300/src/platforms/rcore_android.c#L322
         @export(&androidMain, .{ .name = "main" });
+
+        // NOTE(jae): 2026-04-12
+        // As of March 2026, Raylib requires a linker flag to make __real_fopen exist
+        // https://github.com/raysan5/raylib/pull/5624
+        //
+        // Because Zig doesn't give access to linker flags to add (-Wl,--wrap=fopen), we just export __real_fopen ourselves and call it here:
+        // -Wl,--wrap=fopen
+        // Related comment: https://github.com/raysan5/raylib/blob/f89d38b086c1d0a0c7e38c9c648aa91c05646300/src/platforms/rcore_android.c#L299-L300
+        @export(&raylibFileOpen, .{ .name = "__real_fopen" });
     }
+}
+
+fn raylibFileOpen(filename: [*c]const u8, modes: [*c]const u8) callconv(.c) ?*anyopaque {
+    return @import("std").c.fopen(filename, modes);
 }
 
 fn androidMain() callconv(.c) c_int {
