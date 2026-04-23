@@ -25,25 +25,16 @@ pub fn build(b: *std.Build) void {
             .api_level = .android15,
             .build_tools_version = "36.1.0",
             .ndk_version = "29.0.14206865",
-            // NOTE(jae): 2025-03-09
-            // Previously this example used 'ndk' "27.0.12077973".
-            //
-            // However that has issues with the latest SDL2 version when including 'hardware_buffer.h'
-            // for 32-bit builds.
-            //
-            // - AHARDWAREBUFFER_USAGE_FRONT_BUFFER = 1UL << 32
-            //  - ndk/27.0.12077973/toolchains/llvm/prebuilt/{OS}-x86_64/sysroot/usr/include/android/hardware_buffer.h:322:42:
-            //  - error: expression is not an integral constant expression
         });
 
         const key_store_file = android_sdk.createKeyStore(.example);
         apk.setKeyStore(key_store_file);
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
+        apk.addResourceDirectory(b.path("android/res"));
 
         const generated_asset_dir = b.addNamedWriteFiles("android_asset_directory");
         _ = generated_asset_dir.addCopyFile(b.path("src/zig.bmp"), "zig.bmp");
         apk.addAssetDirectory(generated_asset_dir.getDirectory());
-        apk.addResourceDirectory(b.path("android/res"));
 
         // Add Java files
         if (!crash_on_exception) {

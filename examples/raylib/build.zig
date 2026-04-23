@@ -32,6 +32,10 @@ pub fn build(b: *std.Build) void {
         apk.setAndroidManifest(b.path("android/AndroidManifest.xml"));
         apk.addResourceDirectory(b.path("android/res"));
 
+        const generated_asset_dir = b.addNamedWriteFiles("android_asset_directory");
+        _ = generated_asset_dir.addCopyFile(b.path("src/zig.bmp"), "zig.bmp");
+        apk.addAssetDirectory(generated_asset_dir.getDirectory());
+
         break :blk apk;
     };
 
