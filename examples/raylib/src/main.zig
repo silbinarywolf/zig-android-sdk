@@ -63,7 +63,7 @@ fn raylibFileOpen(filename: [*c]const u8, modes: [*c]const u8) callconv(.c) ?*an
 fn androidMain() callconv(.c) c_int {
     main() catch |err| {
         std.log.err("{t}", .{err});
-        if (@errorReturnTrace()) |trace| std.debug.dumpStackTrace(trace);
+        if (@errorReturnTrace()) |trace| std.debug.dumpErrorReturnTrace(trace);
         return 1;
     };
     return 0;

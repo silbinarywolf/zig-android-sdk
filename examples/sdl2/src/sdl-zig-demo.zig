@@ -32,16 +32,18 @@ fn SDL_main() callconv(.c) void {
         @compileError("SDL_main should not be called outside of Android builds");
     }
     if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 14) {
+        // Deprecated path: Zig 0.14.X support
         _ = std.start.callMain();
         return;
     }
     main() catch |err| {
-        log.err("{s}", .{@errorName(err)});
+        log.err("{t}", .{err});
         if (@errorReturnTrace()) |trace| {
-            if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
+            if (comptime builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15) {
+                // Deprecated path: Zig 0.15.X support
                 std.debug.dumpStackTrace(trace.*);
             } else {
-                std.debug.dumpStackTrace(trace);
+                std.debug.dumpErrorReturnTrace(trace);
             }
         }
     };
