@@ -796,6 +796,19 @@ fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
 fn updateArtifact(apk: *Apk, artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
     const b = apk.b;
 
+    // Set page size to 16KB-aligned binaries by default
+    //
+    // For Android NDK r27 onwards, Android recommends the following setting by default
+    // Source: https://developer.android.com/guide/practices/page-sizes#compile-r27
+    //
+    // NOTE(jae): 2026-04-23
+    // Zig 0.16.0 stable does not do this by default and without this line, there is a pop-up
+    // warning when testing on Pixel 10, Android 17 VM device.
+    // Screenshot is on Github issue here: https://github.com/silbinarywolf/zig-android-sdk/issues/87
+    if (artifact.link_z_max_page_size == null) {
+        artifact.link_z_max_page_size = 16384;
+    }
+
     // If you have a library that is being built as an *.so then install it
     // alongside your library.
     //
