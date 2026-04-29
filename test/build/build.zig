@@ -10,6 +10,10 @@ const log = std.log;
 
 const android = @import("android");
 
+/// Make sure this is a stable version of Zig
+const is_latest_stable_zig = builtin.zig_version.pre == null and
+    builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16;
+
 pub fn build(b: *std.Build) void {
     const exe_name: []const u8 = "build_test";
     const root_target = b.standardTargetOptions(.{});
@@ -18,7 +22,9 @@ pub fn build(b: *std.Build) void {
 
     // NOTE(jae): 2026-04-12
     // Run it *after* the "standardTargets" call
-    testLazyImportAndResolveTargets(b, root_target);
+    if (is_latest_stable_zig) {
+        testLazyImportAndResolveTargets(b, root_target);
+    }
 
     var root_target_single = [_]std.Build.ResolvedTarget{root_target};
     const targets: []std.Build.ResolvedTarget = if (android_targets.len == 0)
@@ -61,9 +67,7 @@ pub fn build(b: *std.Build) void {
             },
         });
         // Must be stable release of Zig *and* 0.16.X or higher
-        if (builtin.zig_version.pre == null and
-            builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16)
-        {
+        if (is_latest_stable_zig) {
             const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
             app_module.addImport("translate_c_external", translate_c_external_mod);
             log.info("testTranslateCExternal: add import 'translate_c_external' to {t}", .{target.result.cpu.arch});

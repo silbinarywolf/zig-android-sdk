@@ -93,15 +93,15 @@ jobs:
       with:
         version: ${{ needs.setup.outputs.zig-stable-version }}
 
-    - name: Build Test (Zig Stable)
+    - name: Build Test
       run: zig build -Dandroid=true --verbose
       working-directory: test/build
 
-    - name: Build Minimal Example (Zig Stable)
+    - name: Build Minimal Example
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (Zig Stable)
+    - name: Build SDL2 Example
       run: |
         zig build -Dandroid=true --verbose
         zig build -Dandroid=true -Dcrash-on-exception --verbose
@@ -110,7 +110,7 @@ jobs:
     # NOTE(jae): 2026-04-09
     # Raylib example only runs on 0.16.X due to downstream dependencies
     #
-    # - name: Build Raylib Example (Zig Stable)
+    # - name: Build Raylib Example
     #  run: zig build -Dandroid=true --verbose
     #  working-directory: examples/raylib
 
@@ -182,21 +182,21 @@ jobs:
       with:
         version: "master"
 
-    - name: Build Test (Zig Nightly)
+    - name: Build Test
       run: zig build -Dandroid=true --verbose
       working-directory: test/build
 
-    - name: Build Minimal Example (Zig Nightly)
+    - name: Build Minimal Example
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
-    - name: Build SDL2 Example (Zig Nightly)
+    - name: Build SDL2 Example
       run: zig build -Dandroid=true --verbose
       working-directory: examples/sdl2
 
     # note(jae): 2026-04-09
     # Downstream packages for Raylib only support 0.16.X-dev right now.
-    - name: Build Raylib Example (Zig Nightly)
+    - name: Build Raylib Example
       run: zig build -Dandroid=true --verbose
       working-directory: examples/raylib
   build-previous-stable:
@@ -232,11 +232,11 @@ jobs:
       with:
         version: ${{ needs.setup.outputs.zig-previous-stable-version }}
 
-    - name: Build Test (Zig Nightly)
+    - name: Build Test
       run: zig build -Dandroid=true --verbose
       working-directory: test/build
 
-    - name: Build Minimal Example 
+    - name: Build Minimal Example
       run: zig build -Dandroid=true --verbose
       working-directory: examples/minimal
 
