@@ -14,6 +14,13 @@
             .hash = "N-V-__8AABTXlAV0z_BGl5-lZeOEm_d2gHEhExT2qjxMqQ72",
             .lazy = true,
         },
+        // NOTE(jae): 2026-04-29
+        // Cannot keep Zig 0.15.X version in without breaking this, would need a seperate test
+        // .translate_c_previous_stable = .{
+        //     .url = "git+https://codeberg.org/ziglang/translate-c#cb8973a121a6de43d3ebc6808cd8070d716e7ea1",
+        //     .hash = "translate_c-0.0.0-Q_BUWveCBgAzseZyfMxV_u8lBHp5SaWD8HOk8jSr_UtT",
+        //     .lazy = true,
+        // },
         .translate_c_stable = .{
             .url = "git+https://codeberg.org/ziglang/translate-c#7a1a9fdc4ab00835748a6657ecbb835e3d5d45f7",
             .hash = "translate_c-0.0.0-Q_BUWvP1BgCjAk6PWv5286tOlvzD9-X-NkuTzh0KxY0Q",

@@ -60,7 +60,10 @@ pub fn build(b: *std.Build) void {
                 },
             },
         });
-        if (builtin.zig_version.pre == null) {
+        // Must be stable release of Zig *and* 0.16.X or higher
+        if (builtin.zig_version.pre == null and
+            builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16)
+        {
             const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
             app_module.addImport("translate_c_external", translate_c_external_mod);
             log.info("testTranslateCExternal: add import 'translate_c_external' to {t}", .{target.result.cpu.arch});
@@ -117,7 +120,10 @@ fn testTranslateCVendor(b: *std.Build, target: std.Build.ResolvedTarget, optimiz
 
 /// Test the Translate-C external dependency version
 fn testTranslateCExternal(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?*std.Build.Module {
-    const translate_c_dep_name = "translate_c_stable";
+    const translate_c_dep_name = if (comptime builtin.zig_version.major == 0 and builtin.zig_version.minor == 15)
+        "translate_c_previous_stable"
+    else
+        "translate_c_stable";
     const translate_c_import = b.lazyImport(@This(), translate_c_dep_name) orelse return null;
     const translate_c = b.lazyDependency(translate_c_dep_name, .{}) orelse return null;
     const Translator = translate_c_import.Translator;
