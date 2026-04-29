@@ -512,19 +512,49 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         while (iter.next()) |it| {
             const module = it.value_ptr.*;
             const root_source_file = module.root_source_file orelse continue;
+            const c_translate_target = module.resolved_target orelse continue;
+            if (!c_translate_target.result.abi.isAndroid()) continue;
             switch (root_source_file) {
                 .generated => |gen| {
                     const step = gen.file.step;
-                    if (step.id != .translate_c) {
-                        continue;
+                    switch (step.id) {
+                        .translate_c => {
+                            // Detect if using Translate-C vendored version
+                            //
+                            // NOTE(jae): 2026-04-29
+                            // Longterm this will deprecated from Zig
+
+                            const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
+                            translate_c.addIncludePath(.{ .cwd_relative = apk.ndk.include_path });
+                            translate_c.addSystemIncludePath(.{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) });
+                        },
+                        .run => {
+                            // Detect if using Translate-C external dependency and make assumptions about the flags
+                            // we can pass into it such as "isystem" and "-I"
+                            //
+                            // Name: https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L89
+                            // Imports: https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L103-L104
+                            if (std.mem.startsWith(u8, step.name, "translate-c ") and
+                                (module.import_table.contains("c_builtins") and module.import_table.contains("helpers")))
+                            {
+                                const run: *std.Build.Step.Run = @fieldParentPtr("step", step);
+
+                                const ndk_include_path: LazyPath = .{ .cwd_relative = apk.ndk.include_path };
+                                const system_include_path: LazyPath = .{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) };
+
+                                // Exposes the system include path `path` to both translate-c and to `t.mod`.
+                                // https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L207-L211
+                                module.addSystemIncludePath(system_include_path);
+                                run.addPrefixedDirectoryArg("-isystem", system_include_path);
+
+                                // Exposes the include path `path` to both translate-c and to `t.mod`.
+                                // https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L203-L206
+                                module.addIncludePath(ndk_include_path);
+                                run.addPrefixedDirectoryArg("-I", ndk_include_path);
+                            }
+                        },
+                        else => continue,
                     }
-                    const c_translate_target = module.resolved_target orelse continue;
-                    if (!c_translate_target.result.abi.isAndroid()) {
-                        continue;
-                    }
-                    const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
-                    translate_c.addIncludePath(.{ .cwd_relative = apk.ndk.include_path });
-                    translate_c.addSystemIncludePath(.{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) });
                 },
                 else => continue,
             }

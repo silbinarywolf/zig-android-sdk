@@ -46,10 +46,23 @@ pub fn build(b: *std.Build) void {
     };
 
     for (targets) |target| {
+        const translate_c_vendored_mod = testTranslateCVendor(b, target, optimize) orelse return;
+        const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
+
         const app_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
             .root_source_file = b.path("src/build_test_main.zig"),
+            .imports = &.{
+                .{
+                    .name = "translate_c_internal",
+                    .module = translate_c_vendored_mod,
+                },
+                .{
+                    .name = "translate_c_external",
+                    .module = translate_c_external_mod,
+                },
+            },
         });
 
         var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
@@ -87,6 +100,34 @@ pub fn build(b: *std.Build) void {
     if (android_apk) |apk| {
         testInstallAndAddRunStep(b, apk);
     }
+}
+
+/// Test the Translate-C vendored copy, this will eventually be deprecated and removed from Zig but for now exists in 0.16.X
+fn testTranslateCVendor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?*std.Build.Module {
+    const trans_c = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("android_c.h",
+            \\#include <android/log.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    return trans_c.createModule();
+}
+
+/// Test the Translate-C external dependency version
+fn testTranslateCExternal(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?*std.Build.Module {
+    const translate_c_import = b.lazyImport(@This(), "translate_c") orelse return null;
+    const translate_c = b.lazyDependency("translate_c", .{}) orelse return null;
+    const Translator = translate_c_import.Translator;
+
+    const trans_libandroid: Translator = .init(translate_c, .{
+        .c_source_file = b.addWriteFiles().add("android_c.h",
+            \\#include <android/log.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    return trans_libandroid.mod;
 }
 
 /// Test calling lazyImport and then calling "resolveTargets"
