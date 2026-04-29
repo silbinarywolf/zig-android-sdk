@@ -6,18 +6,19 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const log = std.log.scoped(.build);
 
 const android = @import("android");
+
+/// Make sure this is a stable version of Zig
+const is_latest_stable_zig = builtin.zig_version.pre == null and
+    builtin.zig_version.major == 0 and builtin.zig_version.minor >= 16;
 
 pub fn build(b: *std.Build) void {
     const exe_name: []const u8 = "build_test";
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const android_targets = android.standardTargets(b, root_target);
-
-    // NOTE(jae): 2026-04-12
-    // Run it *after* the "standardTargets" call
-    testLazyImportAndResolveTargets(b, root_target);
 
     var root_target_single = [_]std.Build.ResolvedTarget{root_target};
     const targets: []std.Build.ResolvedTarget = if (android_targets.len == 0)
@@ -46,77 +47,91 @@ pub fn build(b: *std.Build) void {
     };
 
     for (targets) |target| {
+        if (!target.result.abi.isAndroid()) {
+            std.debug.panic("For testing Android builds only. Target(s) should be Android not: {t}", .{target.result.abi});
+        }
+
+        const translate_c_vendored_mod = testTranslateCVendor(b, target, optimize) orelse return;
+
         const app_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
             .root_source_file = b.path("src/build_test_main.zig"),
+            .imports = &.{
+                .{
+                    .name = "translate_c_internal",
+                    .module = translate_c_vendored_mod,
+                },
+            },
         });
 
-        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
+        const libmain = b.addLibrary(.{
             .name = "main",
             .root_module = app_module,
             .linkage = .dynamic,
-        }) else b.addExecutable(.{
-            .name = exe_name,
-            .root_module = app_module,
         });
 
-        // if building as library for Android, add this target
-        // NOTE: Android has different CPU targets so you need to build a version of your
-        //       code for x86, x86_64, arm, arm64 and more
-        if (target.result.abi.isAndroid()) {
-            const apk: *android.Apk = android_apk orelse @panic("Android APK should be initialized");
-            const android_dep = b.dependency("android", .{
-                .optimize = optimize,
-                .target = target,
-            });
-            exe.root_module.addImport("android", android_dep.module("android"));
+        const apk: *android.Apk = android_apk orelse @panic("Android APK should be initialized");
+        const android_dep = b.dependency("android", .{
+            .optimize = optimize,
+            .target = target,
+        });
+        libmain.root_module.addImport("android", android_dep.module("android"));
 
-            apk.addArtifact(exe);
-        } else {
-            b.installArtifact(exe);
-
-            // If only 1 target, add "run" step
-            if (targets.len == 1) {
-                const run_step = b.step("run", "Run the application");
-                const run_cmd = b.addRunArtifact(exe);
-                run_step.dependOn(&run_cmd.step);
-            }
-        }
+        apk.addArtifact(libmain);
     }
     if (android_apk) |apk| {
         testInstallAndAddRunStep(b, apk);
     }
 }
 
-/// Test calling lazyImport and then calling "resolveTargets"
-///
-/// PR: https://github.com/silbinarywolf/zig-android-sdk/pull/83
-fn testLazyImportAndResolveTargets(b: *std.Build, root_target: std.Build.ResolvedTarget) void {
-    const all_android_targets = true;
-    const android_targets: []std.Build.ResolvedTarget = blk: {
-        if (all_android_targets or root_target.result.abi.isAndroid()) {
-            if (b.lazyImport(@This(), "lazy_android")) |lazy_android| {
-                break :blk lazy_android.resolveTargets(b, .{
-                    .default_target = root_target,
-                    .all_targets = true,
-                });
-            }
-        }
-        break :blk &[0]std.Build.ResolvedTarget{};
-    };
-    if (android_targets.len != 4) @panic("expected 'resolveTargets' it to return 4 Android targets");
+/// Test the Translate-C vendored copy, this will eventually be deprecated and removed from Zig but for now exists in 0.16.X
+fn testTranslateCVendor(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?*std.Build.Module {
+    const trans_c = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("android_c.h",
+            \\#include <android/log.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    return trans_c.createModule();
+}
+
+/// Test the Translate-C external dependency version
+fn testTranslateCExternal(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?*std.Build.Module {
+    const translate_c_dep_name = if (comptime builtin.zig_version.major == 0 and builtin.zig_version.minor == 15)
+        "translate_c_previous_stable"
+    else
+        "translate_c_stable";
+    const translate_c_import = b.lazyImport(@This(), translate_c_dep_name) orelse return null;
+    const translate_c = b.lazyDependency(translate_c_dep_name, .{}) orelse return null;
+    const Translator = translate_c_import.Translator;
+
+    const trans_libandroid: Translator = .init(translate_c, .{
+        .c_source_file = b.addWriteFiles().add("android_c.h",
+            \\#include <android/log.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    return trans_libandroid.mod;
 }
 
 /// Test the addLibraryFile functionality
 ///
 /// Requested feature here: https://github.com/silbinarywolf/zig-android-sdk/issues/77
 fn testAddLibraryFile(b: *std.Build, apk: *android.Apk) void {
+    if (!is_latest_stable_zig) {
+        return;
+    }
+
     const vulkan_validation_dep = b.lazyDependency("vulkan_validation", .{}) orelse return;
     apk.addLibraryFile(.arm64_v8a, vulkan_validation_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"));
     apk.addLibraryFile(.armeabi_v7a, vulkan_validation_dep.path("armeabi-v7a/libVkLayer_khronos_validation.so"));
     apk.addLibraryFile(.x86, vulkan_validation_dep.path("x86/libVkLayer_khronos_validation.so"));
     apk.addLibraryFile(.x86_64, vulkan_validation_dep.path("x86_64/libVkLayer_khronos_validation.so"));
+
+    log.info("testAddLibraryFile: add vulkan validation layers to APK", .{});
 }
 
 fn testInstallAndAddRunStep(b: *std.Build, apk: *android.Apk) void {

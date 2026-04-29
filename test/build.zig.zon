@@ -1,0 +1,11 @@
+.{
+    .name = .tests,
+    .version = "0.0.0",
+    .fingerprint = 0x1260fc5e4c176d8b,
+    .paths = .{""},
+    .dependencies = .{
+        .build = .{ .path = "build" },
+        .lazy_android = .{ .path = "lazy_android" },
+        .translate_c_dep = .{ .path = "translate_c_dep" },
+    },
+}

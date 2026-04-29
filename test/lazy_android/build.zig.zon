@@ -1,0 +1,15 @@
+.{
+    .name = .lazy_android,
+    .version = "0.0.0",
+    .fingerprint = 0xf96a46f8318f02b1,
+    .dependencies = .{
+        .lazy_android = .{
+            .path = "../..",
+            .lazy = true,
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+    },
+}
