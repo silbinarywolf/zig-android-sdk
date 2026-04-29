@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const log = std.log;
 
 const android = @import("android");
 
@@ -47,7 +48,6 @@ pub fn build(b: *std.Build) void {
 
     for (targets) |target| {
         const translate_c_vendored_mod = testTranslateCVendor(b, target, optimize) orelse return;
-        const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
 
         const app_module = b.createModule(.{
             .target = target,
@@ -58,12 +58,13 @@ pub fn build(b: *std.Build) void {
                     .name = "translate_c_internal",
                     .module = translate_c_vendored_mod,
                 },
-                .{
-                    .name = "translate_c_external",
-                    .module = translate_c_external_mod,
-                },
             },
         });
+        if (builtin.zig_version.pre == null) {
+            const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
+            app_module.addImport("translate_c_external", translate_c_external_mod);
+            log.info("testTranslateCExternal: add import 'translate_c_external' to {t}", .{target.result.cpu.arch});
+        }
 
         var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
             .name = "main",
@@ -116,8 +117,9 @@ fn testTranslateCVendor(b: *std.Build, target: std.Build.ResolvedTarget, optimiz
 
 /// Test the Translate-C external dependency version
 fn testTranslateCExternal(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) ?*std.Build.Module {
-    const translate_c_import = b.lazyImport(@This(), "translate_c") orelse return null;
-    const translate_c = b.lazyDependency("translate_c", .{}) orelse return null;
+    const translate_c_dep_name = "translate_c_stable";
+    const translate_c_import = b.lazyImport(@This(), translate_c_dep_name) orelse return null;
+    const translate_c = b.lazyDependency(translate_c_dep_name, .{}) orelse return null;
     const Translator = translate_c_import.Translator;
 
     const trans_libandroid: Translator = .init(translate_c, .{
@@ -147,6 +149,8 @@ fn testLazyImportAndResolveTargets(b: *std.Build, root_target: std.Build.Resolve
         break :blk &[0]std.Build.ResolvedTarget{};
     };
     if (android_targets.len != 4) @panic("expected 'resolveTargets' it to return 4 Android targets");
+
+    log.info("testLazyImportAndResolveTargets: check that resolving android targets worked. Got: {}", .{android_targets.len});
 }
 
 /// Test the addLibraryFile functionality
@@ -158,6 +162,8 @@ fn testAddLibraryFile(b: *std.Build, apk: *android.Apk) void {
     apk.addLibraryFile(.armeabi_v7a, vulkan_validation_dep.path("armeabi-v7a/libVkLayer_khronos_validation.so"));
     apk.addLibraryFile(.x86, vulkan_validation_dep.path("x86/libVkLayer_khronos_validation.so"));
     apk.addLibraryFile(.x86_64, vulkan_validation_dep.path("x86_64/libVkLayer_khronos_validation.so"));
+
+    log.info("testAddLibraryFile: add vulkan validation layers to APK", .{});
 }
 
 fn testInstallAndAddRunStep(b: *std.Build, apk: *android.Apk) void {
