@@ -144,6 +144,10 @@ fn testTranslateCExternal(b: *std.Build, target: std.Build.ResolvedTarget, optim
 ///
 /// Requested feature here: https://github.com/silbinarywolf/zig-android-sdk/issues/77
 fn testAddLibraryFile(b: *std.Build, apk: *android.Apk) void {
+    if (!is_latest_stable_zig) {
+        return;
+    }
+
     const vulkan_validation_dep = b.lazyDependency("vulkan_validation", .{}) orelse return;
     apk.addLibraryFile(.arm64_v8a, vulkan_validation_dep.path("arm64-v8a/libVkLayer_khronos_validation.so"));
     apk.addLibraryFile(.armeabi_v7a, vulkan_validation_dep.path("armeabi-v7a/libVkLayer_khronos_validation.so"));
