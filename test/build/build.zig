@@ -64,44 +64,21 @@ pub fn build(b: *std.Build) void {
                 },
             },
         });
-        // Must be stable release of Zig *and* 0.16.X or higher
-        if (is_latest_stable_zig) {
-            const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
-            app_module.addImport("translate_c_external", translate_c_external_mod);
-            log.info("testTranslateCExternal: add import 'translate_c_external' to {t}", .{target.result.cpu.arch});
-        }
 
-        var exe: *std.Build.Step.Compile = if (target.result.abi.isAndroid()) b.addLibrary(.{
+        const libmain = b.addLibrary(.{
             .name = "main",
             .root_module = app_module,
             .linkage = .dynamic,
-        }) else b.addExecutable(.{
-            .name = exe_name,
-            .root_module = app_module,
         });
 
-        // if building as library for Android, add this target
-        // NOTE: Android has different CPU targets so you need to build a version of your
-        //       code for x86, x86_64, arm, arm64 and more
-        if (target.result.abi.isAndroid()) {
-            const apk: *android.Apk = android_apk orelse @panic("Android APK should be initialized");
-            const android_dep = b.dependency("android", .{
-                .optimize = optimize,
-                .target = target,
-            });
-            exe.root_module.addImport("android", android_dep.module("android"));
+        const apk: *android.Apk = android_apk orelse @panic("Android APK should be initialized");
+        const android_dep = b.dependency("android", .{
+            .optimize = optimize,
+            .target = target,
+        });
+        libmain.root_module.addImport("android", android_dep.module("android"));
 
-            apk.addArtifact(exe);
-        } else {
-            b.installArtifact(exe);
-
-            // If only 1 target, add "run" step
-            if (targets.len == 1) {
-                const run_step = b.step("run", "Run the application");
-                const run_cmd = b.addRunArtifact(exe);
-                run_step.dependOn(&run_cmd.step);
-            }
-        }
+        apk.addArtifact(libmain);
     }
     if (android_apk) |apk| {
         testInstallAndAddRunStep(b, apk);

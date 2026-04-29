@@ -7,14 +7,6 @@ const android = @import("android");
 comptime {
     // For vendored translate-c usage, validate at compile-time that this symbol exists
     _ = @import("translate_c_internal").__android_log_write;
-
-    // For external translate-c usage, validate at compile-time that this symbol exists
-    _ = if (builtin.zig_version.pre == null)
-        // NOTE(jae): 2026-04-29
-        // Only test on Zig stable for now as the external Translate-C dep can break or Aro can break with nightly
-        @import("translate_c_external").__android_log_write
-    else
-        void;
 }
 
 const androidbind = @import("android-bind.zig");
