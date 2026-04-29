@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const log = std.log;
+const log = std.log.scoped(.build);
 
 const android = @import("android");
 
@@ -19,12 +19,6 @@ pub fn build(b: *std.Build) void {
     const root_target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const android_targets = android.standardTargets(b, root_target);
-
-    // NOTE(jae): 2026-04-12
-    // Run it *after* the "standardTargets" call
-    if (is_latest_stable_zig) {
-        testLazyImportAndResolveTargets(b, root_target);
-    }
 
     var root_target_single = [_]std.Build.ResolvedTarget{root_target};
     const targets: []std.Build.ResolvedTarget = if (android_targets.len == 0)
@@ -53,6 +47,10 @@ pub fn build(b: *std.Build) void {
     };
 
     for (targets) |target| {
+        if (!target.result.abi.isAndroid()) {
+            std.debug.panic("For testing Android builds only. Target(s) should be Android not: {t}", .{target.result.abi});
+        }
+
         const translate_c_vendored_mod = testTranslateCVendor(b, target, optimize) orelse return;
 
         const app_module = b.createModule(.{
@@ -140,27 +138,6 @@ fn testTranslateCExternal(b: *std.Build, target: std.Build.ResolvedTarget, optim
         .optimize = optimize,
     });
     return trans_libandroid.mod;
-}
-
-/// Test calling lazyImport and then calling "resolveTargets"
-///
-/// PR: https://github.com/silbinarywolf/zig-android-sdk/pull/83
-fn testLazyImportAndResolveTargets(b: *std.Build, root_target: std.Build.ResolvedTarget) void {
-    const all_android_targets = true;
-    const android_targets: []std.Build.ResolvedTarget = blk: {
-        if (all_android_targets or root_target.result.abi.isAndroid()) {
-            if (b.lazyImport(@This(), "lazy_android")) |lazy_android| {
-                break :blk lazy_android.resolveTargets(b, .{
-                    .default_target = root_target,
-                    .all_targets = true,
-                });
-            }
-        }
-        break :blk &[0]std.Build.ResolvedTarget{};
-    };
-    if (android_targets.len != 4) @panic("expected 'resolveTargets' it to return 4 Android targets");
-
-    log.info("testLazyImportAndResolveTargets: check that resolving android targets worked. Got: {}", .{android_targets.len});
 }
 
 /// Test the addLibraryFile functionality

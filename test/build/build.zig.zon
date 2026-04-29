@@ -5,10 +5,6 @@
         .android = .{
             .path = "../..",
         },
-        .lazy_android = .{
-            .path = "../..",
-            .lazy = true,
-        },
         .vulkan_validation = .{
             .url = "https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.341.0/android-binaries-1.4.341.0.zip",
             .hash = "N-V-__8AABTXlAV0z_BGl5-lZeOEm_d2gHEhExT2qjxMqQ72",

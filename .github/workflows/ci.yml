@@ -94,8 +94,8 @@ jobs:
         version: ${{ needs.setup.outputs.zig-stable-version }}
 
     - name: Build Test
-      run: zig build -Dandroid=true --verbose
-      working-directory: test/build
+      run: zig build --verbose
+      working-directory: test
 
     - name: Build Minimal Example
       run: zig build -Dandroid=true --verbose
@@ -183,8 +183,8 @@ jobs:
         version: "master"
 
     - name: Build Test
-      run: zig build -Dandroid=true --verbose
-      working-directory: test/build
+      run: zig build --verbose
+      working-directory: test
 
     - name: Build Minimal Example
       run: zig build -Dandroid=true --verbose
@@ -233,8 +233,8 @@ jobs:
         version: ${{ needs.setup.outputs.zig-previous-stable-version }}
 
     - name: Build Test
-      run: zig build -Dandroid=true --verbose
-      working-directory: test/build
+      run: zig build --verbose
+      working-directory: test
 
     - name: Build Minimal Example
       run: zig build -Dandroid=true --verbose

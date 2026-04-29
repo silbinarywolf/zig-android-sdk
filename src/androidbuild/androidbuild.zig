@@ -107,6 +107,7 @@ pub fn standardTargets(b: *std.Build, target: ResolvedTarget) []ResolvedTarget {
     // Seperated logic into "resolveTargets" so that consumers of this library can create this option themselves and use "b.lazyImport"
     // See: https://github.com/silbinarywolf/zig-android-sdk/pull/82
     const all_targets = b.option(bool, "android", "Build for all Android targets (x86, x86_64, aarch64, arm, etc)") orelse false;
+
     return resolveTargets(b, .{
         .default_target = target,
         .all_targets = all_targets,
