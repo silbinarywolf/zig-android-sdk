@@ -45,22 +45,60 @@ pub fn build(b: *std.Build) void {
         break :blk apk;
     };
 
+    // Load translate_c module
+    const translate_c_dep_name = "translate_c";
+    const translate_c_import = b.lazyImport(@This(), translate_c_dep_name) orelse return;
+    const translate_c = b.lazyDependency(translate_c_dep_name, .{}) orelse return;
+    const Translator = translate_c_import.Translator;
+
     for (targets) |target| {
         if (!target.result.abi.isAndroid()) {
             std.debug.panic("For testing Android builds only. Target(s) should be Android not: {t}", .{target.result.abi});
         }
 
         const app_module = b.createModule(.{
+            .root_source_file = b.path("src/translate_c_dep_main.zig"),
             .target = target,
             .optimize = optimize,
-            .root_source_file = b.path("src/translate_c_dep_main.zig"),
         });
 
-        // Must be stable release of Zig *and* 0.16.X or higher
+        // testTranslateCExternal
         {
-            const translate_c_external_mod = testTranslateCExternal(b, target, optimize) orelse return;
-            app_module.addImport("translate_c_external", translate_c_external_mod);
-            log.info("testTranslateCExternal: add import 'translate_c_external' to {t}", .{target.result.cpu.arch});
+            const translator: Translator = .init(translate_c, .{
+                .c_source_file = b.addWriteFiles().add("android_c.h",
+                    \\#include <android/log.h> /* For main module */
+                ),
+                .target = target,
+                .optimize = optimize,
+            });
+            app_module.addImport("translate_c_external", translator.mod);
+            log.info("testTranslateCExternal({t}): add import 'translate_c_external'", .{target.result.cpu.arch});
+        }
+
+        // testTranslateCExternal for sub-sub-module, this test should ideally catch recursion with imported modules
+        {
+            const single_depth_mod = b.createModule(.{
+                .root_source_file = b.path("src/translate_c_dep_single_depth_module.zig"),
+                .target = target,
+                .optimize = optimize,
+            });
+            const double_depth_mod = b.createModule(.{
+                .root_source_file = b.path("src/translate_c_dep_double_depth_module.zig"),
+                .target = target,
+                .optimize = optimize,
+            });
+            single_depth_mod.addImport("double_depth", double_depth_mod);
+
+            const translator: Translator = .init(translate_c, .{
+                .c_source_file = b.addWriteFiles().add("android_sub_c.h",
+                    \\#include <android/log.h> /* For sub-module (two-depth from main) */
+                ),
+                .target = target,
+                .optimize = optimize,
+            });
+            double_depth_mod.addImport("translate_c_external_recursive", translator.mod);
+            app_module.addImport("single_depth", single_depth_mod);
+            log.info("testTranslateCExternalSubModule({t}): add import 'translate_c_external_recursive' a sub-sub-module of main", .{target.result.cpu.arch});
         }
 
         const libmain = b.addLibrary(.{
