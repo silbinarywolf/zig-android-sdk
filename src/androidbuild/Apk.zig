@@ -442,10 +442,8 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         break :blk aapt2_package_name_file;
     };
 
-    const android_builtin = blk: {
-        const android_builtin_options = BuiltinOptionsUpdate.create(b, package_name_file);
-        break :blk android_builtin_options.createModule();
-    };
+    const android_builtin_options = BuiltinOptionsUpdate.create(b, package_name_file);
+    const android_builtin_mod = android_builtin_options.createModule();
 
     // We could also use that information to create easy to use Zig step like
     // - zig build adb-uninstall (adb uninstall "com.zig.sdl2")
@@ -492,71 +490,87 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
             @panic(b.fmt("artifact[{d}] has no 'target' set", .{artifact_index}));
         }
 
+        // Add libraries *and* this artifact (exe) to collected libraries
+        //
+        // As of Zig 0.15.2 the order looks like
+        // - your_app_name
+        // - SDL3
+        // - freetype
+        // - imgui
+        const compile_dep_list = apk.getCompileDependencies(artifact, true);
+
+        for (compile_dep_list) |compile_dep| {
+            const graph = apk.getGraph(compile_dep.root_module);
+
+            // Update android_builtin
+            for (graph.modules) |module| {
+                if (module.import_table.get("android_builtin")) |prev_module| {
+                    if (prev_module != android_builtin_mod) {
+                        module.addImport("android_builtin", android_builtin_mod);
+                        compile_dep.step.dependOn(&android_builtin_options.options.step);
+                    }
+                }
+            }
+            // Update translate-c module
+            for (graph.modules) |module| {
+                const root_source_file = module.root_source_file orelse continue;
+                const c_translate_target = module.resolved_target orelse continue;
+                if (!c_translate_target.result.abi.isAndroid()) continue;
+                switch (root_source_file) {
+                    .generated => |gen| {
+                        const step = gen.file.step;
+                        switch (step.id) {
+                            .translate_c => {
+                                // Detect if using Translate-C vendored version
+                                //
+                                // NOTE(jae): 2026-04-29
+                                // Longterm this will deprecated from Zig
+
+                                const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
+                                translate_c.addIncludePath(.{ .cwd_relative = apk.ndk.include_path });
+                                translate_c.addSystemIncludePath(.{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) });
+                            },
+                            .run => {
+                                // Detect if using Translate-C external dependency and make assumptions about the flags
+                                // we can pass into it such as "isystem" and "-I"
+                                //
+                                // Name: https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L89
+                                // Imports: https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L103-L104
+                                if (std.mem.startsWith(u8, step.name, "translate-c ") and
+                                    (module.import_table.contains("c_builtins") and module.import_table.contains("helpers")))
+                                {
+                                    const run: *std.Build.Step.Run = @fieldParentPtr("step", step);
+
+                                    const ndk_include_path: LazyPath = .{ .cwd_relative = apk.ndk.include_path };
+                                    const system_include_path: LazyPath = .{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) };
+
+                                    // Exposes the system include path `path` to both translate-c and to `t.mod`.
+                                    // https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L207-L211
+                                    module.addSystemIncludePath(system_include_path);
+                                    run.addPrefixedDirectoryArg("-isystem", system_include_path);
+
+                                    // Exposes the include path `path` to both translate-c and to `t.mod`.
+                                    // https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L203-L206
+                                    module.addIncludePath(ndk_include_path);
+                                    run.addPrefixedDirectoryArg("-I", ndk_include_path);
+                                }
+                            },
+                            else => continue,
+                        }
+                    },
+                    else => continue,
+                }
+            }
+        }
         // Add module
         // - If a module has no `root_source_file` (e.g you're only compiling C files using `addCSourceFiles`)
         //   then adding an import module will cause a build error (as of Zig 0.15.1).
         if (artifact.root_module.root_source_file != null) {
-            artifact.root_module.addImport("android_builtin", android_builtin);
-        }
-
-        var modules_it = artifact.root_module.import_table.iterator();
-        while (modules_it.next()) |entry| {
-            const module = entry.value_ptr.*;
-            if (module.import_table.get("android_builtin")) |_| {
-                module.addImport("android_builtin", android_builtin);
-            }
-        }
-
-        // Find TranslateC dependencies and add system path
-        var iter = artifact.root_module.import_table.iterator();
-        while (iter.next()) |it| {
-            const module = it.value_ptr.*;
-            const root_source_file = module.root_source_file orelse continue;
-            const c_translate_target = module.resolved_target orelse continue;
-            if (!c_translate_target.result.abi.isAndroid()) continue;
-            switch (root_source_file) {
-                .generated => |gen| {
-                    const step = gen.file.step;
-                    switch (step.id) {
-                        .translate_c => {
-                            // Detect if using Translate-C vendored version
-                            //
-                            // NOTE(jae): 2026-04-29
-                            // Longterm this will deprecated from Zig
-
-                            const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
-                            translate_c.addIncludePath(.{ .cwd_relative = apk.ndk.include_path });
-                            translate_c.addSystemIncludePath(.{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) });
-                        },
-                        .run => {
-                            // Detect if using Translate-C external dependency and make assumptions about the flags
-                            // we can pass into it such as "isystem" and "-I"
-                            //
-                            // Name: https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L89
-                            // Imports: https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L103-L104
-                            if (std.mem.startsWith(u8, step.name, "translate-c ") and
-                                (module.import_table.contains("c_builtins") and module.import_table.contains("helpers")))
-                            {
-                                const run: *std.Build.Step.Run = @fieldParentPtr("step", step);
-
-                                const ndk_include_path: LazyPath = .{ .cwd_relative = apk.ndk.include_path };
-                                const system_include_path: LazyPath = .{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) };
-
-                                // Exposes the system include path `path` to both translate-c and to `t.mod`.
-                                // https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L207-L211
-                                module.addSystemIncludePath(system_include_path);
-                                run.addPrefixedDirectoryArg("-isystem", system_include_path);
-
-                                // Exposes the include path `path` to both translate-c and to `t.mod`.
-                                // https://codeberg.org/ziglang/translate-c/src/commit/71642ad0084d433f14b091a7b2b109f0be915dbb/build/Translator.zig#L203-L206
-                                module.addIncludePath(ndk_include_path);
-                                run.addPrefixedDirectoryArg("-I", ndk_include_path);
-                            }
-                        },
-                        else => continue,
-                    }
-                },
-                else => continue,
+            const module = artifact.root_module;
+            if (module.import_table.get("android_builtin")) |prev_module| {
+                if (prev_module != android_builtin_mod) {
+                    artifact.root_module.addImport("android_builtin", android_builtin_mod);
+                }
             }
         }
 
@@ -823,6 +837,76 @@ fn setLibCFile(apk: *Apk, compile: *Step.Compile) void {
     compile.setLibCFile(android_libc_path);
 }
 
+/// Copy-paste of "lib/std/Build/Module.zig" but it doesn't cache via GetGraph and won't potentially break the
+/// Zig build system.
+///
+/// Return the full set of `Step.Compile` which `start` depends on, recursively. `start` itself is
+/// always returned as the first element. If `chase_dynamic` is `false`, then dynamic libraries are
+/// not included, and their dependencies are not considered; if `chase_dynamic` is `true`, dynamic
+/// libraries are treated the same as other linked `Compile`s.
+fn getCompileDependencies(apk: *Apk, start: *Step.Compile, chase_dynamic: bool) []const *Step.Compile {
+    const arena = start.step.owner.graph.arena;
+
+    var compiles: std.AutoArrayHashMapUnmanaged(*Step.Compile, void) = .empty;
+    var next_idx: usize = 0;
+
+    compiles.putNoClobber(arena, start, {}) catch @panic("OOM");
+
+    while (next_idx < compiles.count()) {
+        const compile = compiles.keys()[next_idx];
+        next_idx += 1;
+
+        for (apk.getGraph(compile.root_module).modules) |mod| {
+            for (mod.link_objects.items) |lo| {
+                switch (lo) {
+                    .other_step => |other_compile| {
+                        if (!chase_dynamic and other_compile.isDynamicLibrary()) continue;
+                        compiles.put(arena, other_compile, {}) catch @panic("OOM");
+                    },
+                    else => {},
+                }
+            }
+        }
+    }
+
+    return compiles.keys();
+}
+
+const Graph = struct {
+    modules: []const *std.Build.Module,
+    names: []const []const u8,
+};
+
+/// Copy-paste of "lib/std/Build/Module.zig" but it doesn't cache and won't potentially break the
+/// Zig build system.
+///
+/// Given that `root` is the root `Module` of a compilation, return all `Module`s
+/// in the module graph, including `root` itself. `root` is guaranteed to be the
+/// first module in the returned slice.
+fn getGraph(apk: *Apk, root: *std.Build.Module) Graph {
+    const arena = apk.b.graph.arena;
+
+    var modules: std.AutoArrayHashMapUnmanaged(*std.Build.Module, []const u8) = .empty;
+    var next_idx: usize = 0;
+
+    modules.putNoClobber(arena, root, "root") catch @panic("OOM");
+
+    while (next_idx < modules.count()) {
+        const mod = modules.keys()[next_idx];
+        next_idx += 1;
+        modules.ensureUnusedCapacity(arena, mod.import_table.count()) catch @panic("OOM");
+        for (mod.import_table.keys(), mod.import_table.values()) |import_name, other_mod| {
+            modules.putAssumeCapacity(other_mod, import_name);
+        }
+    }
+
+    const result: Graph = .{
+        .modules = modules.keys(),
+        .names = modules.values(),
+    };
+    return result;
+}
+
 fn updateArtifact(apk: *Apk, artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
     const b = apk.b;
 
@@ -911,7 +995,7 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
     const b = apk.b;
 
     const should_apply_fix = (artifact.root_module.link_libcpp == true or
-        dependsOnSystemLibrary(artifact, "c++abi_zig_workaround"));
+        apk.dependsOnSystemLibrary(artifact, "c++abi_zig_workaround"));
     if (!should_apply_fix) {
         return;
     }
@@ -953,9 +1037,9 @@ fn applyLibLinkCppWorkaroundIssue19(apk: *Apk, artifact: *Step.Compile) void {
 
 /// Copy-paste of "dependsOnSystemLibrary" that only checks if that system library is included to
 /// workaround a bug with in Zig 0.15.0-dev.1092+d772c0627
-fn dependsOnSystemLibrary(compile: *Step.Compile, name: []const u8) bool {
-    for (compile.getCompileDependencies(true)) |some_compile| {
-        for (some_compile.root_module.getGraph().modules) |mod| {
+fn dependsOnSystemLibrary(apk: *Apk, compile: *Step.Compile, name: []const u8) bool {
+    for (apk.getCompileDependencies(compile, true)) |dep_compile| {
+        for (apk.getGraph(dep_compile.root_module).modules) |mod| {
             for (mod.link_objects.items) |lo| {
                 switch (lo) {
                     .system_lib => |lib| if (std.mem.eql(u8, lib.name, name)) return true,

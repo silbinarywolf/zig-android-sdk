@@ -28,9 +28,13 @@ pub fn build(b: *std.Build) void {
 
     // Create stub of builtin options.
     // This is discovered and then replaced by "Apk" in the build process
-    const android_builtin_options = std.Build.addOptions(b);
-    android_builtin_options.addOption([:0]const u8, "package_name", "");
-    const android_builtin_module = android_builtin_options.createModule();
+    // const android_builtin_options = std.Build.addOptions(b);
+    // android_builtin_options.addOption([:0]const u8, "package_name", "");
+    const android_builtin_module = b.createModule(.{
+        .root_source_file = b.path("src/android/android_builtin.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // Create android module
     const android_module = b.addModule("android", .{
