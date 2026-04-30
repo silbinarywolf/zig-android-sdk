@@ -2,7 +2,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const log = std.log.scoped(.build);
+const log = std.log.scoped(.translate_c_dep);
 
 const android = @import("android");
 
