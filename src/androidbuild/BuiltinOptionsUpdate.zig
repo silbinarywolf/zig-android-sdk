@@ -73,7 +73,7 @@ fn make(step: *Step, _: Build.Step.MakeOptions) !void {
         mem.trimRight(u8, package_name_filedata, " \r\n")
     else
         mem.trimEnd(u8, package_name_filedata, " \r\n");
-    const package_name: [:0]const u8 = try b.allocator.dupeZ(u8, package_name_stripped);
+    const package_name: [:0]const u8 = try b.allocator.dupeSentinel(u8, package_name_stripped, 0);
 
     options.addOption([:0]const u8, "package_name", package_name);
 }
