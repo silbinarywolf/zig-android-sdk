@@ -193,41 +193,6 @@ pub fn addLibraryFile(apk: *Apk, android_target: androidbuild.AndroidTarget, pat
     }) catch @panic("OOM");
 }
 
-fn addLibraryPaths(apk: *Apk, module: *std.Build.Module) void {
-    const b = apk.b;
-    const android_ndk_sysroot = apk.ndk.sysroot_path;
-
-    // get target
-    const target: ResolvedTarget = module.resolved_target orelse {
-        @panic(b.fmt("no 'target' set on Android module", .{}));
-    };
-    const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
-
-    // NOTE(jae): 2024-09-11
-    // These *must* be in order of API version, then architecture, then non-arch specific otherwise
-    // when starting an *.so from Android or an emulator you can get an error message like this:
-    // - "java.lang.UnsatisfiedLinkError: dlopen failed: TLS symbol "_ZZN8gwp_asan15getThreadLocalsEvE6Locals" in dlopened"
-    const android_api_version: u32 = @intFromEnum(apk.api_level);
-
-    // NOTE(jae): 2025-03-09
-    // Resolve issue where building SDL2 gets the following error for 'arm-linux-androideabi'
-    // SDL2-2.32.2/src/cpuinfo/SDL_cpuinfo.c:93:10: error: 'cpu-features.h' file not found
-    //
-    // This include is specifically needed for: #if defined(__ANDROID__) && defined(__arm__) && !defined(HAVE_GETAUXVAL)
-    //
-    // ie. $ANDROID_HOME/ndk/{ndk_version}/sources/android/cpufeatures
-    if (target.result.cpu.arch == .arm) {
-        module.addIncludePath(.{
-            .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.sdk.android_sdk_path, apk.ndk.version }),
-        });
-    }
-
-    // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ usr/lib/aarch64-linux-android/35
-    module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}/{d}", .{ android_ndk_sysroot, system_target, android_api_version }) });
-    // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ /usr/lib/aarch64-linux-android
-    module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}", .{ android_ndk_sysroot, system_target }) });
-}
-
 pub fn installApk(apk: *Apk) void {
     const b = apk.b;
     const install_apk = apk.addInstallApk();
@@ -511,6 +476,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
                     }
                 }
             }
+
             // Update translate-c module
             for (graph.modules) |module| {
                 const root_source_file = module.root_source_file orelse continue;
@@ -529,6 +495,18 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
                                 const translate_c: *std.Build.Step.TranslateC = @fieldParentPtr("step", step);
                                 translate_c.addIncludePath(.{ .cwd_relative = apk.ndk.include_path });
                                 translate_c.addSystemIncludePath(.{ .cwd_relative = apk.getSystemIncludePath(c_translate_target) });
+
+                                // NOTE(jae): 2026-06-14 - Zig 0.16.0
+                                // Patch Aro/Translate-C to fix issues with SDL3 using translate-c.
+                                // - _Nullable not working
+                                // - _Nonnull not working
+                                // - Force _FORTIFY_SOURCE to 0 to avoid references to missing functions
+                                //
+                                // Possibly related: https://github.com/Vexu/arocc/issues/989
+                                translate_c.defineCMacro("_Nullable", "");
+                                translate_c.defineCMacro("_Nonnull", "");
+                                translate_c.defineCMacro("_FORTIFY_SOURCE", "0");
+                                translate_c.defineCMacro("__ANDROID_API__", b.fmt("{}", .{@intFromEnum(apk.api_level)}));
                             },
                             .run => {
                                 // Detect if using Translate-C external dependency and make assumptions about the flags
@@ -561,6 +539,26 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
                     else => continue,
                 }
             }
+
+            // update linked libraries that use C or C++ to:
+            // - use Android LibC file
+            // - add Android NDK library paths. (libandroid, liblog, etc)
+            switch (compile_dep.kind) {
+                .lib => {
+                    // if (compile_dep.linkage.? == .static) {
+                    //     if (compile_dep.root_module.pic == null) {
+                    //         compile_dep.root_module.pic = true;
+                    //     }
+                    // }
+
+                    // Update updateSharedLibraryOptions, libCFile
+                    apk.updateArtifact(compile_dep, apk_files);
+
+                    // Apply workaround for Zig 0.14.0 and Zig 0.15.X
+                    apk.applyLibLinkCppWorkaroundIssue19(compile_dep);
+                },
+                else => continue,
+            }
         }
         // Add module
         // - If a module has no `root_source_file` (e.g you're only compiling C files using `addCSourceFiles`)
@@ -573,11 +571,6 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
                 }
             }
         }
-
-        // update linked libraries that use C or C++ to:
-        // - use Android LibC file
-        // - add Android NDK library paths. (libandroid, liblog, etc)
-        apk.updateLinkObjects(artifact, apk_files);
 
         // update artifact to:
         // - Be configured to work correctly on Android
@@ -958,29 +951,36 @@ fn updateArtifact(apk: *Apk, artifact: *Step.Compile, raw_top_level_apk_files: *
     }
 
     // Add library paths to find "android", "log", etc
-    apk.addLibraryPaths(artifact.root_module);
-}
+    {
+        const module = artifact.root_module;
+        const target: ResolvedTarget = module.resolved_target orelse {
+            @panic(b.fmt("no 'target' set on Android module", .{}));
+        };
+        const system_target = getAndroidTriple(target) catch |err| @panic(@errorName(err));
 
-fn updateLinkObjects(apk: *Apk, root_artifact: *Step.Compile, raw_top_level_apk_files: *Step.WriteFile) void {
-    for (root_artifact.root_module.link_objects.items) |link_object| {
-        switch (link_object) {
-            .other_step => |artifact| {
-                switch (artifact.kind) {
-                    .lib => {
-                        // Update updateSharedLibraryOptions, libCFile, addLibraryPaths
-                        apk.updateArtifact(artifact, raw_top_level_apk_files);
+        // NOTE(jae): 2024-09-11
+        // These *must* be in order of API version, then architecture, then non-arch specific otherwise
+        // when starting an *.so from Android or an emulator you can get an error message like this:
+        // - "java.lang.UnsatisfiedLinkError: dlopen failed: TLS symbol "_ZZN8gwp_asan15getThreadLocalsEvE6Locals" in dlopened"
+        const android_api_version: u32 = @intFromEnum(apk.api_level);
 
-                        // Update libraries linked to this library
-                        apk.updateLinkObjects(artifact, raw_top_level_apk_files);
-
-                        // Apply workaround for Zig 0.14.0 and Zig 0.15.X
-                        apk.applyLibLinkCppWorkaroundIssue19(artifact);
-                    },
-                    else => continue,
-                }
-            },
-            else => {},
+        // NOTE(jae): 2025-03-09
+        // Resolve issue where building SDL2 gets the following error for 'arm-linux-androideabi'
+        // SDL2-2.32.2/src/cpuinfo/SDL_cpuinfo.c:93:10: error: 'cpu-features.h' file not found
+        //
+        // This include is specifically needed for: #if defined(__ANDROID__) && defined(__arm__) && !defined(HAVE_GETAUXVAL)
+        //
+        // ie. $ANDROID_HOME/ndk/{ndk_version}/sources/android/cpufeatures
+        if (target.result.cpu.arch == .arm) {
+            module.addIncludePath(.{
+                .cwd_relative = b.fmt("{s}/ndk/{s}/sources/android/cpufeatures", .{ apk.sdk.android_sdk_path, apk.ndk.version }),
+            });
         }
+
+        // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ usr/lib/aarch64-linux-android/35
+        module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}/{d}", .{ apk.ndk.sysroot_path, system_target, android_api_version }) });
+        // ie. $ANDROID_HOME/ndk/{ndk_version}/toolchains/llvm/prebuilt/{host_os_and_arch}/sysroot ++ /usr/lib/aarch64-linux-android
+        module.addLibraryPath(.{ .cwd_relative = b.fmt("{s}/usr/lib/{s}", .{ apk.ndk.sysroot_path, system_target }) });
     }
 }
 
