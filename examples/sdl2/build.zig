@@ -60,8 +60,9 @@ pub fn build(b: *std.Build) void {
                 apk.addJavaSourceFile(.{ .file = file.contents.copy });
             }
         } else {
-            // TODO(jae): 2026-06-29: Resolve this issue
-            @compileError("TODO: Figure out how to feed WriteFiles into APK easily moving forward");
+            for (sdl_java_files.copies.items) |copy| {
+                apk.addJavaSourceFile(.{ .file = copy.src_file });
+            }
         }
         break :blk apk;
     };
