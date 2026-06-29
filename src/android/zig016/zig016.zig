@@ -5,7 +5,10 @@ const builtin = @import("builtin");
 const ndk = @import("ndk");
 
 const android_builtin = @import("android_builtin");
-const package_name: ?[*:0]const u8 = if (android_builtin.package_name.len > 0) android_builtin.package_name else null;
+const package_name: ?[*:0]const u8 = if (android_builtin.package_name.len > 0)
+    std.fmt.comptimePrint("{s}", .{android_builtin.package_name})
+else
+    null;
 
 const LogFunction = fn (comptime message_level: std.log.Level, comptime scope: @EnumLiteral(), comptime format: []const u8, args: anytype) void;
 

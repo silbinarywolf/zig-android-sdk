@@ -28,10 +28,6 @@ pub fn init(b: *std.Build, android_sdk_path: []const u8, build_tools_version: []
     // ie. $ANDROID_HOME/build-tools/35.0.0
     const build_tools_path = b.pathResolve(&[_][]const u8{ android_sdk_path, "build-tools", build_tools_version });
 
-    // TODO(jae): 2025-05-24
-    // We could validate build_tool_version to ensure its 3 numbers with dots seperating
-    // ie. "35.0.0"
-
     // Check if build tools path is accessible
     // ie. $ANDROID_HOME/build-tools/35.0.0
     const access_wrapped_error = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)

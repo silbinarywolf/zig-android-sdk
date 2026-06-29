@@ -48,8 +48,11 @@ fn androidLogFn(
         .err => .err, // android.ANDROID_LOG_WARN = 6,
     };
 
-    const fields_info = args_type_info.@"struct".fields;
-    if (fields_info.len == 0 and
+    const fields_len: comptime_int = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16)
+        args_type_info.@"struct".fields.len
+    else
+        args_type_info.@"struct".field_names.len;
+    if (fields_len == 0 and
         comptime std.mem.indexOfScalar(u8, format, '{') == null)
     {
         // If no formatting, log string directly with Android logging

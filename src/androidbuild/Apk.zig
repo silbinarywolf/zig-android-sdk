@@ -157,7 +157,13 @@ pub const AddJavaSourceFileOption = struct {
 /// of your APK.
 pub fn addJavaSourceFile(apk: *Apk, options: AddJavaSourceFileOption) void {
     const b = apk.b;
-    apk.java_files.append(b.allocator, options.file.dupe(b)) catch @panic("OOM");
+    const java_file = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16)
+        // Deprecated: Just uses Build
+        options.file.dupe(b)
+    else
+        options.file.dupe(b.graph);
+
+    apk.java_files.append(b.allocator, java_file) catch @panic("OOM");
 }
 
 pub const AddJavaSourceFilesOptions = struct {
@@ -268,8 +274,8 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         @panic("call setAndroidManifestFile and point to your AndroidManifest.xml file");
     };
 
-    // TODO(jae): 2024-10-01
-    // Add option where you can explicitly set an optional release mode with like:
+    // NOTE(jae): 2024-10-01
+    // Consider adding option where you can explicitly set an optional release mode with like:
     // - setMode(.debug)
     //
     // If that value ISN'T set then we can just infer based on optimization level.
@@ -314,8 +320,11 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         aapt2link.addArg("-I");
         aapt2link.addFileArg(root_jar);
 
-        if (b.verbose) {
-            aapt2link.addArg("-v");
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+            // Deprecated: b.verbose no longer exists
+            if (b.verbose) {
+                aapt2link.addArg("-v");
+            }
         }
 
         // Inserts android:debuggable="true" in to the application node of the manifest,
@@ -392,7 +401,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         break :blk resources_apk_file;
     };
 
-    const package_name_file = blk: {
+    const package_name_file: LazyPath = blk: {
         const aapt2packagename = b.addSystemCommand(&[_][]const u8{
             apk.build_tools.aapt2,
             "dump",
@@ -403,7 +412,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         const aapt2_package_name_file = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 15)
             aapt2packagename.captureStdOut()
         else
-            aapt2packagename.captureStdOut(.{});
+            aapt2packagename.captureStdOut(.{ .trim_whitespace = .trailing });
         break :blk aapt2_package_name_file;
     };
 
@@ -437,6 +446,8 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
             .cwd_relative => |sub_path| sub_path,
             .generated => @panic("invalid precompiled library, cannot be generated"),
             .dependency => |dep| dep.sub_path,
+            // TODO(jae): 2026-06-29: Handle .relative in Zig 0.17.X
+            // .relative => @panic("UNHANDLED: invalid relative path"),
         });
         _ = apk_files.addCopyFile(precompiled_library.path, b.fmt("lib/{s}/{s}", .{ so_dir, precompiled_lib_basename }));
     }
@@ -484,8 +495,17 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
                 if (!c_translate_target.result.abi.isAndroid()) continue;
                 switch (root_source_file) {
                     .generated => |gen| {
-                        const step = gen.file.step;
-                        switch (step.id) {
+                        const step: *std.Build.Step = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16)
+                            // Deprecated: Zig 0.16.X, used to get Step directly
+                            gen.file.step
+                        else
+                            b.graph.generated_files.items[@intFromEnum(gen.index)];
+                        const tag = if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16)
+                            // Deprecated: Zig 0.16.X, renamed to tag in later versions
+                            step.id
+                        else
+                            step.tag;
+                        switch (tag) {
                             .translate_c => {
                                 // Detect if using Translate-C vendored version
                                 //
@@ -609,10 +629,12 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         javac_cmd.addArg("-cp");
         javac_cmd.addFileArg(root_jar);
 
-        // NOTE(jae): 2026-03-01
-        // If we have verbose logging on, telling us about deprecated Java files
-        if (b.verbose) {
-            javac_cmd.addArg("-Xlint:deprecation");
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+            // NOTE(jae): 2026-03-01
+            // If we have verbose logging on, telling us about deprecated Java files
+            if (b.verbose) {
+                javac_cmd.addArg("-Xlint:deprecation");
+            }
         }
 
         // Output directory
@@ -641,7 +663,12 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         // d8.addArg(number_as_string);
 
         // add each output *.class file
-        D8Glob.create(b, d8, java_classes_output_dir, root_jar);
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+            D8Glob.create(b, d8, java_classes_output_dir, root_jar);
+        } else {
+            // TODO(jae): 2026-06-29: Update D8Glob to collect files as seperate Run artifact
+            @compileError("TODO: Rewrite D8Glob to use Step.Run");
+        }
 
         // ie. android_sdk/platforms/android-{api-level}/android.jar
         d8.addArg("--lib");
@@ -662,7 +689,8 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
             apk.sdk.java_tools.jar,
         });
         jar.setName(runNameContext("jar (unzip resources.apk)"));
-        if (b.verbose) {
+
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16 and b.verbose) {
             jar.addArg("--verbose");
         }
 
@@ -720,7 +748,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         // -M, --no-manifest = Do not create a manifest file for the entries
         // -0, --no-compress = Store only; use no ZIP compression
         const compress_zip_arg = "-cfM";
-        if (b.verbose) jar.addArg(compress_zip_arg ++ "v") else jar.addArg(compress_zip_arg);
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16 and b.verbose) jar.addArg(compress_zip_arg ++ "v") else jar.addArg(compress_zip_arg);
         const output_zip_file = jar.addOutputFileArg("compiled_code.zip");
         jar.addArg(".");
 
@@ -747,7 +775,10 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         // -M, --no-manifest = Do not create a manifest file for the entries
         // -0, --no-compress = Store only; use no ZIP compression
         const update_zip_arg = "-ufM0";
-        if (b.verbose) jar.addArg(update_zip_arg ++ "v") else jar.addArg(update_zip_arg);
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16 and b.verbose)
+            jar.addArg(update_zip_arg ++ "v")
+        else
+            jar.addArg(update_zip_arg);
         jar.addFileArg(zip_file);
         jar.addArg(".");
         break :blk &jar.step;
@@ -777,7 +808,7 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
         // Source: https://developer.android.com/tools/zipalign (10th Sept, 2024)
         //
         // Example: "zipalign -P 16 -f -v 4 infile.apk outfile.apk"
-        if (b.verbose) {
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16 and b.verbose) {
             zipalign.addArg("-v");
         }
         zipalign.addArgs(&.{
@@ -1072,7 +1103,7 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
         artifact.root_module.strip = optimize == .ReleaseSmall;
     }
 
-    // TODO(jae): 2024-09-19 - Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
+    // NOTE(jae): 2024-09-19 - Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
     // Remove when https://github.com/ziglang/zig/issues/7935 is resolved.
     if (artifact.root_module.resolved_target) |target| {
         if (target.result.cpu.arch == .x86) {
@@ -1121,9 +1152,20 @@ fn updatePathWithJdk(apk: *Apk, run: *std.Build.Step.Run) Allocator.Error!void {
             b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
             path,
         });
+        // NOTE(jae): 2026-06-29
+        // Old version allowed mutating the env_map directly
         try env_map.put("PATH", new_path);
-    } else {
+    } else if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+        // Deprecated: addPathDir was removed
         run.addPathDir(b.pathJoin(&.{ apk.sdk.jdk_path, "bin" }));
+    } else {
+        var env_map = run.getEnvMap();
+        const path = env_map.get("PATH") orelse &[0]u8{};
+        const new_path = try std.mem.join(b.allocator, &[1]u8{std.fs.path.delimiter}, &.{
+            b.fmt("{s}/bin", .{apk.sdk.jdk_path}),
+            path,
+        });
+        run.setEnvironmentVariable("PATH", new_path);
     }
 }
 

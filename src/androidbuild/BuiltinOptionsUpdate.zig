@@ -10,31 +10,37 @@ const fs = @import("std").fs;
 const mem = @import("std").mem;
 const assert = @import("std").debug.assert;
 
-pub const base_id: Step.Id = .custom;
-
-step: Step,
-
+step: if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) Step else void,
 options: *Options,
 package_name_stdout: LazyPath,
 
 pub fn create(owner: *Build, package_name_stdout: LazyPath) *BuiltinOptionsUpdate {
-    const options = Build.addOptions(owner);
-
     const builtin_options_update = owner.allocator.create(BuiltinOptionsUpdate) catch @panic("OOM");
-    builtin_options_update.* = .{
-        .step = Step.init(.{
-            .id = base_id,
-            .name = androidbuild.runNameContext("builtin_options_update"),
-            .owner = owner,
-            .makeFn = make,
-        }),
-        .options = options,
-        .package_name_stdout = package_name_stdout,
-    };
-    // Run step relies on this finishing
-    options.step.dependOn(&builtin_options_update.step);
-    // Depend on package name stdout before running this step
-    package_name_stdout.addStepDependencies(&builtin_options_update.step);
+
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+        // Deprecated: Make Zig 0.15.X use this approach
+        builtin_options_update.* = .{
+            .step = Step.init(.{
+                .id = .custom,
+                .name = androidbuild.runNameContext("builtin_options_update"),
+                .owner = owner,
+                .makeFn = deprecatedZig016OrLowerMake,
+            }),
+            .options = Build.addOptions(owner),
+            .package_name_stdout = package_name_stdout,
+        };
+        // Run step relies on this finishing
+        builtin_options_update.options.step.dependOn(&builtin_options_update.step);
+        // Depend on package name stdout before running this step
+        package_name_stdout.addStepDependencies(&builtin_options_update.step);
+    } else {
+        builtin_options_update.* = .{
+            .step = {},
+            .options = Build.addOptions(owner),
+            .package_name_stdout = package_name_stdout,
+        };
+        builtin_options_update.options.addOptionPath("package_name", package_name_stdout);
+    }
     return builtin_options_update;
 }
 
@@ -42,7 +48,7 @@ pub fn createModule(self: *BuiltinOptionsUpdate) *Build.Module {
     return self.options.createModule();
 }
 
-fn make(step: *Step, _: Build.Step.MakeOptions) !void {
+fn deprecatedZig016OrLowerMake(step: *Step, _: Build.Step.MakeOptions) !void {
     const b = step.owner;
     const builtin_options_update: *BuiltinOptionsUpdate = @fieldParentPtr("step", step);
     const options = builtin_options_update.options;
