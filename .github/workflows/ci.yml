@@ -114,7 +114,7 @@ jobs:
     #  run: zig build -Dandroid=true --verbose
     #  working-directory: examples/raylib
 
-    # TODO(jae): 2025-03-30
+    # NOTE(jae): 2025-03-30
     # Need to figure out how to get 'adb shell monkey' to return an error code or be able to return an error code
     # if the stdout of the command has 'Monkey aborted due to error.'
 

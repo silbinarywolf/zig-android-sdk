@@ -54,8 +54,14 @@ pub fn build(b: *std.Build) void {
             .target = android_targets[0],
         });
         const sdl_java_files = sdl_dep.namedWriteFiles("sdljava");
-        for (sdl_java_files.files.items) |file| {
-            apk.addJavaSourceFile(.{ .file = file.contents.copy });
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+            // Deprecated: Zig 0.16.X and lower
+            for (sdl_java_files.files.items) |file| {
+                apk.addJavaSourceFile(.{ .file = file.contents.copy });
+            }
+        } else {
+            // TODO(jae): 2026-06-29: Resolve this issue
+            @compileError("TODO: Figure out how to feed WriteFiles into APK easily moving forward");
         }
         break :blk apk;
     };

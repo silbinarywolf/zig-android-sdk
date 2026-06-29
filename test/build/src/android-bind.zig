@@ -1,4 +1,4 @@
-// TODO(jae): 2024-09-19
+// NOTE(jae): 2024-09-19
 // Consider just making this import from native C libraries.
 // For now just wanted a basic example that compiles and runs on an Android emulator
 

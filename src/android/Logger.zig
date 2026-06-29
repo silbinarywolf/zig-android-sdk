@@ -15,7 +15,7 @@ const Writer = std.Io.Writer;
 /// logs with the package name.
 ///
 /// To workaround this, we bake the package name into the Zig binaries.
-const package_name: [:0]const u8 = @import("android_builtin").package_name;
+const package_name: [:0]const u8 = std.fmt.comptimePrint("{s}", .{@import("android_builtin").package_name});
 
 level: Level,
 writer: Writer,

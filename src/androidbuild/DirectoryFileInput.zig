@@ -28,22 +28,28 @@ const FileInputRange = struct {
 };
 
 pub fn create(owner: *Build, run: *Run, dir: LazyPath) void {
-    const self = owner.allocator.create(DirectoryFileInput) catch @panic("OOM");
-    self.* = .{
-        .step = Step.init(.{
-            .id = .custom,
-            .name = androidbuild.runNameContext("directory-file-input"),
-            .owner = owner,
-            .makeFn = make,
-        }),
-        .run = run,
-        .dir = dir,
-        .file_input_range = null,
-    };
-    // Run step relies on DirectoryFileInput finishing
-    run.step.dependOn(&self.step);
-    // If dir is generated then this will wait for that dir to generate
-    dir.addStepDependencies(&self.step);
+    if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+        // Deprecated: Zig 0.16.X and lower supported custom Make steps
+        const self = owner.allocator.create(DirectoryFileInput) catch @panic("OOM");
+        self.* = .{
+            .step = Step.init(.{
+                .id = .custom,
+                .name = androidbuild.runNameContext("directory-file-input"),
+                .owner = owner,
+                .makeFn = make,
+            }),
+            .run = run,
+            .dir = dir,
+            .file_input_range = null,
+        };
+        // Run step relies on DirectoryFileInput finishing
+        run.step.dependOn(&self.step);
+        // If dir is generated then this will wait for that dir to generate
+        dir.addStepDependencies(&self.step);
+    } else {
+        // TODO(jae): 2026-06-29: Find all files in directory input
+        @compileError("TODO: Update this in the same way I've updated D8Glob");
+    }
 }
 
 fn make(step: *Step, options: Build.Step.MakeOptions) !void {

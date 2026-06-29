@@ -1,7 +1,7 @@
 //! This module is for testing that we implemented certain build features and to at least make sure
 //! there is code coverage for new APIs added.
 //!
-//! TODO(Jae): 2026-04-12
+//! NOTE(Jae): 2026-04-12
 //! Ideally adding functions to also validate the output APK file would be nice too.
 
 const std = @import("std");
