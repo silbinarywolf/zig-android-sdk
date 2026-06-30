@@ -203,7 +203,7 @@ pub fn adbInstall(sdk: *Sdk, apk: LazyPath) void {
 }
 
 /// Install an APK onto your Android device or emulator
-/// ie. "adb install ./zig-out/bin/minimal.apk"
+/// ie. "adb install -r ./zig-out/bin/minimal.apk"
 pub fn addAdbInstall(sdk: *Sdk, apk: LazyPath) *Step.Run {
     const b = sdk.b;
     if (sdk.platform_tools.adb.len == 0) {
@@ -212,6 +212,7 @@ pub fn addAdbInstall(sdk: *Sdk, apk: LazyPath) *Step.Run {
     const adb_install = b.addSystemCommand(&.{
         sdk.platform_tools.adb,
         "install",
+        "-r",
     });
     adb_install.addFileArg(apk);
     return adb_install;
