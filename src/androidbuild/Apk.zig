@@ -59,11 +59,16 @@ assets: ArrayList(Resource),
 pub const Options = struct {
     /// APK file output name, ie. "{name}.apk"
     name: []const u8,
-    /// ie. "35.0.0"
+    /// "37.0.0" will use "$ANDROID_HOME/build-tools/37.0.0" which contains tools like:
+    /// "aapt2", "zipalign", "apksigner", "d8"
     build_tools_version: []const u8,
-    /// ie. "27.0.12077973"
+    /// "27.0.12077973" will is used to access:
+    /// - Include headers:  $ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/YOUR_HOST_OS_HERE/sysroot/usr/include
+    /// - System libraries: $ANDROID_HOME/ndk/27.0.12077973/toolchains/llvm/prebuilt/YOUR_HOST_OS_HERE/sysroot/usr/lib
     ndk_version: []const u8,
-    /// ie. .android15 = 35 (android 15 uses API version 35)
+    /// .android15 = 35 (android 15 uses API version 35) decides on:
+    /// - System libraries:  $ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/$HOST_OS/sysroot/usr/lib/$TARGET_ARCH/$ANDROID_API_LEVEL
+    /// - Platform tool jar: $ANDROID_HOME/platforms/android-ANDROID_API_LEVEL
     api_level: ApiLevel,
 };
 
