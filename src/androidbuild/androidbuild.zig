@@ -39,6 +39,8 @@ pub const ApiLevel = enum(u32) {
     android15 = 35,
     /// Baklava
     android16 = 36,
+    /// Cinnamon Bun
+    android17 = 37,
     // allow custom overrides (incase this library is not up to date with the latest android version)
     _,
 };
