@@ -14,7 +14,7 @@ concurrency:
 env:
   CI_JAVA_VERSION: 17
   # 35.0.0 = Android 15
-  CI_ANDROID_SDK: "tools platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456"
+  CI_ANDROID_SDK: "platform-tools platforms;android-35 build-tools;35.0.0 ndk;29.0.13113456"
   CI_ZIG_PREVIOUS_STABLE_VERSION: "0.15.1"
   CI_ZIG_STABLE_VERSION: "0.16.0"
 
@@ -25,7 +25,7 @@ jobs:
     name: zig fmt --check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     - name: Setup Zig
       uses: mlugg/setup-zig@v2
@@ -70,7 +70,7 @@ jobs:
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
  
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     # Setup Java and Android SDK
     - name: Set up JDK ${{ needs.setup.outputs.java-version }}
@@ -80,7 +80,7 @@ jobs:
         distribution: "temurin"
 
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+      uses: android-actions/setup-android@v4
       with:
         packages: ${{ needs.setup.outputs.android-sdk }}
 
@@ -162,7 +162,7 @@ jobs:
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
  
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     # Setup Java and Android SDK
     - name: Set up JDK ${{ needs.setup.outputs.java-version }}
@@ -172,7 +172,7 @@ jobs:
         distribution: "temurin"
 
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+      uses: android-actions/setup-android@v4
       with:
         packages: ${{ needs.setup.outputs.android-sdk }}
 
@@ -212,7 +212,7 @@ jobs:
           - os: "macos-14" # arm64 as per table: https://github.com/actions/runner-images/blob/8a1eeaf6ac70c66f675a04078d1a7222edd42008/README.md#available-images
  
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
 
     # Setup Java and Android SDK
     - name: Set up JDK ${{ needs.setup.outputs.java-version }}
@@ -222,7 +222,7 @@ jobs:
         distribution: "temurin"
 
     - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+      uses: android-actions/setup-android@v4
       with:
         packages: ${{ needs.setup.outputs.android-sdk }}
 
