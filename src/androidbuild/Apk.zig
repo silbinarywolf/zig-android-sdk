@@ -287,8 +287,14 @@ fn doInstallApk(apk: *Apk) Allocator.Error!*Step.InstallFile {
     const debug_apk: bool = blk: {
         for (apk.artifacts.items) |root_artifact| {
             if (root_artifact.root_module.optimize) |optimize| {
-                if (optimize == .Debug) {
-                    break :blk true;
+                if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+                    if (optimize == .Debug) {
+                        break :blk true;
+                    }
+                } else {
+                    if (optimize == .debug) {
+                        break :blk true;
+                    }
                 }
             }
         }
@@ -1105,7 +1111,11 @@ fn updateSharedLibraryOptions(artifact: *std.Build.Step.Compile) void {
 
     if (artifact.root_module.optimize) |optimize| {
         // NOTE(jae): ZigAndroidTemplate used: (optimize == .ReleaseSmall);
-        artifact.root_module.strip = optimize == .ReleaseSmall;
+        if (builtin.zig_version.major == 0 and builtin.zig_version.minor <= 16) {
+            artifact.root_module.strip = optimize == .ReleaseSmall;
+        } else {
+            artifact.root_module.strip = optimize == .small;
+        }
     }
 
     // NOTE(jae): 2024-09-19 - Copy-pasted from https://github.com/ikskuh/ZigAndroidTemplate/blob/master/Sdk.zig
